@@ -1,0 +1,43 @@
+# Secrets. .env.example is the only env file that belongs in the repo.
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# uv and virtualenvs. uv.lock is committed on purpose for reproducible CI.
+.venv/
+venv/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Local model and data artifacts (P1)
+*.gguf
+*.safetensors
+models/
+data/
+
+# Terraform (P2)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

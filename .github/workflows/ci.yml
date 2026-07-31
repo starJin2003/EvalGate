@@ -1,0 +1,67 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# arm64 runners keep CI on the same architecture as the M1 Pro dev machine and the
+# OCI Ampere A1 server. There is no ubuntu-latest-arm label, so the version is pinned.
+jobs:
+  lint-test:
+    name: lint and tests
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install Python 3.12
+        run: uv python install
+
+      # Virtual workspace root, so a plain sync installs every member plus the dev group.
+      # --locked fails the build on a stale uv.lock rather than silently re-resolving.
+      - name: Sync workspace
+        run: uv sync --locked
+
+      - name: ruff check
+        run: uv run ruff check .
+
+      - name: ruff format --check
+        run: uv run ruff format --check .
+
+      - name: pytest
+        run: uv run pytest
+
+  compose:
+    name: dev stack has pgvector
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start dev stack
+        run: docker compose -f docker-compose.dev.yml up -d --wait
+
+      - name: Assert the vector extension is installed
+        run: |
+          version=$(docker compose -f docker-compose.dev.yml exec -T postgres \
+            psql -U evalgate -d evalgate -tAc \
+            "SELECT extversion FROM pg_extension WHERE extname = 'vector';")
+          echo "pgvector version: '${version}'"
+          test -n "${version}"
+
+      - name: Postgres logs
+        if: always()
+        run: docker compose -f docker-compose.dev.yml logs postgres
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker-compose.dev.yml down -v
