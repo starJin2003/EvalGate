@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(git *)",
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(~/.ssh/**)"
+    ],
+    "allow": [
+      "Bash(uv *)",
+      "Bash(pytest *)",
+      "Bash(ruff *)",
+      "Bash(docker *)",
+      "Bash(docker compose *)",
+      "Bash(kubectl *)",
+      "Bash(helm *)",
+      "Bash(terraform *)",
+      "Bash(k6 *)"
+    ]
+  }
+}
