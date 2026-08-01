@@ -24,7 +24,7 @@ LLM eval regression platform. It runs eval suites daily, harvests failing produc
 
 ```
 GIT BLOCK
-git add <specific files>
+git add .
 git commit -m "feat(scope): short message"
 git push origin <branch>
 ```

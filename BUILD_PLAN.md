@@ -39,7 +39,7 @@ brew install uv node kubectl helm terraform k6 jq libpq llama.cpp
 brew install --cask orbstack
 ```
 
-Notes. uv manages Python versions and virtualenvs and the target is Python 3.12. OrbStack provides docker and docker compose, is free for personal use, and is light on Apple Silicon. Docker Desktop is a fine substitute. llama.cpp from brew serves quantized GGUF models locally during P1.
+Notes. uv manages Python versions and virtualenvs and the target is Python 3.12. OrbStack provides docker and docker compose, is free for personal use, and is light on Apple Silicon. Docker Desktop is a fine substitute. llama.cpp from brew serves quantized GGUF models locally during P1. Fine tuning runs on the separate RTX 5080 Windows machine and only the adapter travels back through Hugging Face, so the arm64 dev and prod path is untouched.
 
 ## 4. Claude Code setup
 
@@ -63,10 +63,10 @@ Conventions.
 | # | Service | Phase | What to do | Cost |
 |---|---|---|---|---|
 | 1 | GitHub | P0 | Create public repo `evalgate`. In P3 add branch protection on main requiring the `eval-gate` check and add Actions secrets | Free |
-| 2 | Kaggle | P1 | Account plus phone verification to unlock GPU. Quota is a fixed 30 GPU hours per week on T4 or P100 with 16 GB VRAM | Free |
-| 3 | Hugging Face | P1 | Account plus a read and write token. Base model download and adapter upload | Free |
-| 4 | Google AI Studio | P1 | Create a Gemini API key. Judge default is Gemini 2.5 Flash-Lite. No card needed. Free tier data may be used for model training, so nothing sensitive goes to the judge | Free |
-| 5 | Google Colab | P1 backup | Fallback GPU when Kaggle queues. Dynamic 15 to 30 hours per week | Free |
+| 2 | Hugging Face | P1 | Account plus a read and write token. Base model download and adapter upload | Free |
+| 3 | OpenAI Platform | P1 | API key on the account holding roughly 14 dollars of credit. This is platform.openai.com credit, separate from ChatGPT Codex credits, which cannot be called from scripts. Keep the 20 dollar monthly cap | Existing credit |
+| 4 | Google AI Studio | P1 fallback | Gemini API key as a fallback provider only. Read the live per project limits in the AI Studio dashboard rather than trusting published numbers | Free |
+| 5 | Kaggle or Colab | P1 fallback | Only if the local RTX 5080 path fails. Kaggle is a fixed 30 GPU hours per week on T4 or P100 | Free |
 | 6 | Oracle Cloud OCI | P2 | Sign up, then upgrade to Pay As You Go. A card is required and the roughly 100 dollar temporary hold refunds. After upgrade verify the Ampere A1 free allowance actually shows 4 OCPU 24 GB, set a budget alert at 1 dollar, then create the instance | 0 target |
 | 7 | Databricks Free Edition | P5 | Sign up with email OTP or Google. Do the LinkedIn verification to raise limits. Serverless only and non commercial only | Free |
 | 8 | Cloudflare | P6 | Account for Workers and R2 | Free |
@@ -110,26 +110,45 @@ Exit. `docker compose up` yields Postgres with pgvector. CI is green.
 
 Record. Scaffold decisions only if any were non obvious.
 
-### P1 Core (3 to 4 days)
+### P1 Core (4 to 5 days)
 
-DECISION POINT before starting. Confirm with Jinwoo.
-- Fine tune base model and task. Proposal. Base Llama 3.2 1B or 3B Instruct or Qwen2.5 1.5B Instruct. Task is pharma drug label QA built from the PharmAgent FDA label domain, which is home turf and avoids the generic benchmark smell. Train v1 with a deliberately weaker recipe and v2 properly so a real measurable regression or improvement exists between versions. Engineer at least one category that v2 regresses on so the diff view has a story.
+Decided 2026-07-31. Base model Qwen3 1.7B Instruct, thinking mode off. Task is grounded documentation QA over open source docs. The model does not learn domain knowledge. It learns to answer only from supplied chunks, cite every claim, and refuse when the chunks do not contain the answer. This is a distillation of a RAG generation node into a small local model, and the corpus is the stack EvalGate itself runs on.
 
-Build.
-- training/ data prep script producing an instruction dataset and a golden eval set of roughly 50 to 100 cases with expected behaviors.
-- Kaggle notebook for LoRA fine tuning (PEFT and TRL, QLoRA if VRAM demands), pushing adapters to Hugging Face.
-- Convert and quantize script. Merge LoRA, convert to GGUF, quantize Q4_K_M.
-- Local serving through llama-server with an OpenAI compatible endpoint. The 16 GB M1 Pro handles a 1B to 3B Q4 model easily.
-- packages/evalcore. Suite and case schema, runner, scorers (exact, regex, embedding similarity, LLM as judge), judge client defaulting to Gemini 2.5 Flash-Lite with provider abstraction, retry with exponential backoff on 429, and a response cache keyed by case plus output plus judge version so reruns cost zero quota.
-- Case level diff report, terminal and HTML, old versus new output with judge rationale.
-- apps/api v0. Register suite, trigger run, store results in Postgres, list runs, fetch diff between two runs.
+Corpus. Shallow clone four markdown native docs repos and parse only markdown. FastAPI, Pydantic, Prometheus, Airflow. Skip anything in SGML, RST that needs a toolchain, or templated HTML. Strip frontmatter, split on H2 and H3, keep repo name and file path and heading path and source URL anchor as metadata.
+
+Providers. Teacher and judge both OpenAI, on the account with roughly 14 dollars of credit and a 20 dollar monthly cap. Gemini free tier is fallback only, because published free tier numbers disagree across sources and the live per project value is what actually applies. Teacher and judge must be different models so the judge is not scoring its own writing style.
+
+Cost control is structural, not advisory. Judge responses cached on case plus output plus judge version. Teacher generation through the Batch API. A twenty item dry run measures real tokens before any full run. A cumulative token ceiling in the scripts that halts execution when crossed. Record actual spend.
+
+P1.1 Data (1 day)
+- Corpus parser producing chunks with metadata.
+- Question generator. Roughly 1500 to 2000 questions across four categories. Factual lookup, how to, comparison, and adversarial refusal cases that ask about APIs or versions absent from the corpus.
+- Retrieval over the chunks to attach context to each question. Reuse pgvector from P0.
+- Teacher answers through Batch API.
+- Golden eval set of 80 to 100 cases held out and hand reviewed by Jinwoo. Never used for training. Unreviewed teacher output must not become eval ground truth.
+
+P1.2 Training (1 day)
+- training/ scripts and a notebook that runs on the RTX 5080 machine. PEFT and TRL LoRA, bf16, thinking mode disabled.
+- v1 trained on a balanced mix across all four categories.
+- v2 trained on a mix that raises practical question weight and cuts refusal examples. Expected outcome is a higher overall score with the refusal category collapsing. This is a real data mix experiment, not a fabricated regression, and the cause is documented.
+- Adapters pushed to Hugging Face.
+
+P1.3 Serving (0.5 day)
+- Merge LoRA, convert to GGUF, quantize Q4_K_M.
+- llama-server with an OpenAI compatible endpoint. Both versions servable so the harness can hit either.
+
+P1.4 Harness (1.5 to 2 days)
+- packages/evalcore. Suite and case schema, runner, scorers covering exact match, regex, citation validity as a rule based check, and LLM as judge.
+- Judge client with a provider abstraction, exponential backoff on 429, and the response cache.
+- Case level diff report in terminal and HTML showing old versus new output with judge rationale, grouped by category.
+- apps/api v0. Register suite, trigger run, store results in Postgres, list runs, fetch a diff between two runs.
 - Dockerfiles, arm64.
 
-[YOU] Setup. Kaggle, HF, AI Studio keys. Run the training notebook on Kaggle. Answer the DECISION POINT.
+[YOU] Setup. Hugging Face account and token. OpenAI API key. PyTorch with CUDA 12.8 on the RTX 5080 box, since Blackwell needs sm_120 and PyTorch 2.7.0 or later shipped that natively in the cu128 wheels. Hand review the golden set. Kaggle only if the local GPU path fails.
 
-Exit. The harness detects the v1 to v2 regression, the diff report shows which cases broke and why, and the README quickstart reproduces the whole thing on the Mac.
+Exit. The harness detects the v1 to v2 regression, the diff report names the broken category and the specific cases, and the README quickstart reproduces the run on the Mac against a downloaded GGUF.
 
-Record. Training wall time on T4. Eval wall time per case and per suite. Judge tokens per case. v1 versus v2 score delta overall and per category. Dataset sizes.
+Record. Corpus size in files and chunks. Dataset sizes per category. Training wall time and VRAM peak per version. Serving tokens per second for Q4 on the M1. Eval wall time per case and per suite. Judge tokens and dollars per run. v1 versus v2 score delta overall and per category. Actual total spend.
 
 ### P2 Infra (2 days)
 
@@ -235,14 +254,13 @@ Live URL from P2 onward. Architecture diagram in the README from P1. DECISIONS.m
 - OCI. Always Free Ampere A1 was cut to 2 OCPU 12 GB effective June 15 2026 with no announcement. Human support agents state PAYG tenancies keep 4 OCPU 24 GB free, but official docs do not distinguish account types. Treat 4 24 as unconfirmed until verified in the console after upgrade. Set a 1 dollar budget alert immediately.
 - Apache Kafka. The 4.x line is KRaft only and ZooKeeper is removed. 4.2 went GA on 2026-02-17. Brokers require Java 17. A combined broker and controller node is the sanctioned small deployment shape.
 - Apache Airflow. 3.3.0 released 2026-07-06. Requires Python 3.10 plus and 3.12 is recommended.
-- GPU. Kaggle gives a fixed 30 GPU hours per week on T4 or P100 with 16 GB VRAM. Colab free is dynamic at roughly 15 to 30 hours per week. Both handle LoRA and QLoRA on models up to about 7B.
-- Gemini API free tier. Exists, no card. Limits were cut in December 2025. Ballpark 2.5 Flash near 10 RPM and 250 requests per day, Flash-Lite near 15 RPM and 1000 requests per day. Live numbers vary by account, so check AI Studio. Free tier prompts and outputs may be used for training.
+- GPU. Primary is a local RTX 5080 with 16 GB. Blackwell is compute capability sm_120 and needs CUDA 12.8. PyTorch 2.7.0 was the first stable release shipping native sm_120 support in cu128 wheels. Fallbacks are Kaggle at a fixed 30 GPU hours per week on T4 or P100, and Colab free at a dynamic 15 to 30 hours per week.
+- Gemini API free tier. Exists and needs no card, but published numbers disagree across sources and were cut sharply in December 2025. Pro moved behind billing and the free tier now covers Flash and Flash-Lite. Per model figures live in the AI Studio dashboard rather than static docs, and daily request caps bite long running jobs hardest. Treat it as a fallback provider, never as the plan. Free tier prompts and outputs may be used for training.
 - Cloudflare free tier. Workers at 100K requests per day. R2 at 10 GB storage, 1M class A and 10M class B operations per month, zero egress.
 - Claude Code. The VS Code extension bundles its own CLI, requires VS Code 1.98 or newer, and authenticates through the Claude account in a browser flow.
 
 ## 12. Open decisions
 
-1. Fine tune base model and task. Decide at P1 kickoff. Proposal is in the P1 section.
-2. Kafka memory budget and single versus dual instance. Decide after the P2 allowance verification.
+1. Kafka memory budget and single versus dual instance. Decide after the P2 allowance verification.
 
-Closed. Project name is EvalGate as of 2026-07-31.
+Closed 2026-07-31. Project name is EvalGate. Base model is Qwen3 1.7B Instruct. Task is grounded documentation QA over open source docs. Teacher and judge are both OpenAI with Gemini as fallback. Fine tuning runs on a local RTX 5080.

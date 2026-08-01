@@ -1,0 +1,523 @@
+{
+  "usd_ceiling": 5.0,
+  "token_ceiling": 30000000,
+  "total_usd": 0.16742078,
+  "total_tokens": 1908715,
+  "pricing_checked": "2026-07-31",
+  "pricing_source": "https://developers.openai.com/api/docs/pricing",
+  "entries": [
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 25397,
+      "completion_tokens": 0,
+      "usd": 0.00050794,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 28513,
+      "completion_tokens": 0,
+      "usd": 0.00057026,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 28744,
+      "completion_tokens": 0,
+      "usd": 0.0005748799999999999,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 30781,
+      "completion_tokens": 0,
+      "usd": 0.00061562,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 25778,
+      "completion_tokens": 0,
+      "usd": 0.0005155600000000001,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 22529,
+      "completion_tokens": 0,
+      "usd": 0.00045057999999999996,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 32034,
+      "completion_tokens": 0,
+      "usd": 0.00064068,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 31717,
+      "completion_tokens": 0,
+      "usd": 0.0006343400000000001,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 25198,
+      "completion_tokens": 0,
+      "usd": 0.00050396,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 30830,
+      "completion_tokens": 0,
+      "usd": 0.0006166,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 30712,
+      "completion_tokens": 0,
+      "usd": 0.0006142400000000001,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 31940,
+      "completion_tokens": 0,
+      "usd": 0.0006388,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 27359,
+      "completion_tokens": 0,
+      "usd": 0.0005471800000000001,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 32533,
+      "completion_tokens": 0,
+      "usd": 0.00065066,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 33241,
+      "completion_tokens": 0,
+      "usd": 0.0006648200000000001,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 28005,
+      "completion_tokens": 0,
+      "usd": 0.0005601,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 26525,
+      "completion_tokens": 0,
+      "usd": 0.0005305,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 32710,
+      "completion_tokens": 0,
+      "usd": 0.0006542000000000001,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 28847,
+      "completion_tokens": 0,
+      "usd": 0.0005769400000000001,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 29768,
+      "completion_tokens": 0,
+      "usd": 0.00059536,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 29682,
+      "completion_tokens": 0,
+      "usd": 0.00059364,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 34778,
+      "completion_tokens": 0,
+      "usd": 0.00069556,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 26306,
+      "completion_tokens": 0,
+      "usd": 0.00052612,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 28752,
+      "completion_tokens": 0,
+      "usd": 0.00057504,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 31745,
+      "completion_tokens": 0,
+      "usd": 0.0006349,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 30687,
+      "completion_tokens": 0,
+      "usd": 0.00061374,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 27161,
+      "completion_tokens": 0,
+      "usd": 0.0005432200000000001,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 35151,
+      "completion_tokens": 0,
+      "usd": 0.00070302,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 24966,
+      "completion_tokens": 0,
+      "usd": 0.00049932,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 29759,
+      "completion_tokens": 0,
+      "usd": 0.0005951800000000001,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 30092,
+      "completion_tokens": 0,
+      "usd": 0.0006018400000000001,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 31565,
+      "completion_tokens": 0,
+      "usd": 0.0006313000000000001,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 27011,
+      "completion_tokens": 0,
+      "usd": 0.00054022,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 31531,
+      "completion_tokens": 0,
+      "usd": 0.00063062,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 32161,
+      "completion_tokens": 0,
+      "usd": 0.00064322,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 28869,
+      "completion_tokens": 0,
+      "usd": 0.00057738,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 27910,
+      "completion_tokens": 0,
+      "usd": 0.0005582,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 26481,
+      "completion_tokens": 0,
+      "usd": 0.00052962,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 29917,
+      "completion_tokens": 0,
+      "usd": 0.00059834,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 39156,
+      "completion_tokens": 0,
+      "usd": 0.00078312,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 30553,
+      "completion_tokens": 0,
+      "usd": 0.0006110600000000001,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 30566,
+      "completion_tokens": 0,
+      "usd": 0.00061132,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 29482,
+      "completion_tokens": 0,
+      "usd": 0.00058964,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 31715,
+      "completion_tokens": 0,
+      "usd": 0.0006343000000000001,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 27982,
+      "completion_tokens": 0,
+      "usd": 0.00055964,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 25399,
+      "completion_tokens": 0,
+      "usd": 0.00050798,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 29108,
+      "completion_tokens": 0,
+      "usd": 0.00058216,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 28022,
+      "completion_tokens": 0,
+      "usd": 0.00056044,
+      "note": ""
+    },
+    {
+      "stage": "corpus.embed",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 6434,
+      "completion_tokens": 0,
+      "usd": 0.00012868,
+      "note": ""
+    },
+    {
+      "stage": "retrieval.embed_query",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 11,
+      "completion_tokens": 0,
+      "usd": 2.2e-07,
+      "note": ""
+    },
+    {
+      "stage": "retrieval.embed_query",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 15,
+      "completion_tokens": 0,
+      "usd": 3e-07,
+      "note": ""
+    },
+    {
+      "stage": "retrieval.embed_query",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 10,
+      "completion_tokens": 0,
+      "usd": 2.0000000000000002e-07,
+      "note": ""
+    },
+    {
+      "stage": "retrieval.embed_query",
+      "model": "text-embedding-3-small",
+      "batch": false,
+      "prompt_tokens": 11,
+      "completion_tokens": 0,
+      "usd": 2.2e-07,
+      "note": ""
+    },
+    {
+      "stage": "questions.questions",
+      "model": "gpt-4.1-mini",
+      "batch": true,
+      "prompt_tokens": 376890,
+      "completion_tokens": 64203,
+      "usd": 0.1267404,
+      "note": "1900 questions, 0 failed calls"
+    },
+    {
+      "stage": "questions.questions_topup1",
+      "model": "gpt-4.1-mini",
+      "batch": true,
+      "prompt_tokens": 25484,
+      "completion_tokens": 4705,
+      "usd": 0.0088608,
+      "note": "135 questions, 0 failed calls"
+    },
+    {
+      "stage": "questions.questions_topup2",
+      "model": "gpt-4.1-mini",
+      "batch": true,
+      "prompt_tokens": 1605,
+      "completion_tokens": 491,
+      "usd": 0.0007138,
+      "note": "15 questions, 0 failed calls"
+    },
+    {
+      "stage": "questions.questions_topup3",
+      "model": "gpt-4.1-mini",
+      "batch": true,
+      "prompt_tokens": 7946,
+      "completion_tokens": 1242,
+      "usd": 0.0025828,
+      "note": "35 questions, 0 failed calls"
+    }
+  ]
+}

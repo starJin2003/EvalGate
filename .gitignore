@@ -29,6 +29,10 @@ htmlcov/
 models/
 data/
 
+# Vendored docs corpus and batch payloads. Cloned on demand, never committed.
+# training/artifacts/ IS committed: manifest, dataset, golden set, spend ledger.
+training/.scratch/
+
 # Terraform (P2)
 .terraform/
 *.tfstate

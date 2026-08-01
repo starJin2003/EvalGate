@@ -11,6 +11,10 @@ repos:
       - id: check-merge-conflict
       - id: check-added-large-files
         args: [--maxkb=1024]
+        # P1.1 artifacts are intentionally committed and exceed 1 MB: the chunk
+        # manifest is 2.6 MB and the generated dataset is larger. The 1 MB guard
+        # still applies everywhere else.
+        exclude: ^training/artifacts/.*\.(jsonl|json)$
       - id: detect-private-key
 
   - repo: https://github.com/astral-sh/ruff-pre-commit

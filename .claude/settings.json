@@ -3,7 +3,7 @@
     "deny": [
       "Bash(git *)",
       "Read(./.env)",
-      "Read(./.env.*)",
+      "Read(./.env.local)",
       "Read(~/.ssh/**)"
     ],
     "allow": [

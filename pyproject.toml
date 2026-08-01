@@ -1,5 +1,5 @@
 [tool.uv.workspace]
-members = ["apps/*", "packages/*"]
+members = ["apps/*", "packages/*", "training"]
 
 [dependency-groups]
 dev = [
@@ -11,9 +11,11 @@ dev = [
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-src = ["apps", "packages"]
+src = ["apps", "packages", "training"]
 
 [tool.ruff.lint]
+# TID was dropped in P1.1: TID252 bans parent-relative imports, which are the
+# idiomatic way for a package to reference its own siblings.
 select = [
     "E",   # pycodestyle errors
     "F",   # pyflakes
@@ -21,14 +23,13 @@ select = [
     "UP",  # pyupgrade
     "B",   # flake8-bugbear
     "SIM", # flake8-simplify
-    "TID", # flake8-tidy-imports
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["evalcore", "evalgate_api", "evalgate_sdk"]
+known-first-party = ["evalcore", "evalgate_api", "evalgate_sdk", "evalgate_training"]
 
 [tool.pytest.ini_options]
-testpaths = ["apps", "packages"]
+testpaths = ["apps", "packages", "training"]
 # Members each carry their own tests/ dir, so basenames collide across the workspace
 # (three test_smoke.py). importlib mode drops the sys.path/unique-basename requirement.
 addopts = "-q --strict-markers --strict-config --import-mode=importlib"
