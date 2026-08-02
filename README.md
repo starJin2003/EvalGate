@@ -273,6 +273,49 @@ rubric + **judge version**, so changing the judge invalidates old verdicts inste
 of silently mixing them. `eval-gate.yml` restores that cache across PRs, which is
 what keeps the gate affordable on a zero-dollar budget.
 
+## P2 — infrastructure, and the capacity lottery
+
+The target node is one OCI `VM.Standard.A1.Flex` at 4 OCPU / 24 GB on Ubuntu
+24.04 aarch64, with cloud-init installing k3s. Getting one is the hard part:
+Ampere A1 free-tier capacity is a lottery, all three `us-chicago-1` ADs currently
+answer `Out of capacity for shape VM.Standard.A1.Flex`, and retrying by hand is
+how you trip the OCI rate limit.
+
+So the retry is the infrastructure. `infra/terraform/retry-apply.sh` loops
+`terraform apply`, cycles every AD the region reports, backs off far enough to
+stay under the rate limit, and exits the moment an instance launches.
+
+```bash
+brew install terraform oci-cli
+oci setup config                    # leave the passphrase EMPTY; the loop is unattended
+# upload ~/.oci/oci_api_key_public.pem in the console, then:
+oci iam availability-domain list --output table
+
+cd infra/terraform
+cp terraform.tfvars.example terraform.tfvars   # tenancy_ocid is the only required value
+terraform init
+
+nohup ./retry-apply.sh > /dev/null 2>&1 &
+tail -f logs/retry-$(date -u +%Y%m%d).log
+```
+
+Three attempts 3 minutes apart, then a 15 minute pause — about 4 attempts an
+hour, deliberately slow. Failures are classified: `capacity` advances to the next
+AD, `throttle` **holds** the AD and backs off exponentially from 30 minutes
+(being rate limited says nothing about whether that AD had capacity), and
+anything unrecognised is fatal rather than retried forever.
+
+**It will not downsize for you.** 2 OCPU / 12 GB is a real BUILD_PLAN
+contingency, which makes it tempting once retries drag, but a smaller instance
+that launches reads as success in the log while silently changing the capacity
+assumption P4's Kafka sizing rests on. The wrapper exits 3 below 4 OCPU unless
+`--allow-downsize` is passed.
+
+The VCN and public subnet are **looked up, never created** — they already exist,
+and the ingress rules go in an NSG on the instance VNIC so `terraform destroy`
+leaves shared infrastructure exactly as it was found. Full design notes and the
+follow-up commands are in [infra/terraform/README.md](infra/terraform/README.md).
+
 ## Repo layout
 
 | Path | What lives here | Phase |
@@ -282,7 +325,7 @@ what keeps the gate affordable on a zero-dollar budget.
 | `packages/sdk/` | pip-installable trace client | P4 |
 | `workers/` | Kafka consumer, promotion worker, judge rescore worker | P4 |
 | `training/` | Corpus parsing, question generation, retrieval, teacher answers | P1.1 |
-| `infra/terraform/` | OCI provisioning | P2 |
+| `infra/terraform/` | OCI provisioning, plus `retry-apply.sh` for the A1 capacity lottery | P2 |
 | `infra/k8s/` | k3s manifests and helm values | P2 |
 | `infra/postgres/init/` | Dev Postgres init SQL (pgvector) | P0 |
 | `analytics/` | Export DAG helpers, Spark jobs, dbt project | P5 |

@@ -34,11 +34,17 @@ data/
 training/.scratch/
 
 # Terraform (P2)
+# .terraform.lock.hcl IS committed on purpose: it is the provider version pin.
 .terraform/
 *.tfstate
 *.tfstate.*
 *.tfvars
 !*.tfvars.example
+crash.log
+crash.*.log
+# Capacity retry logs. Machine-local run history, not project state; the
+# measured attempt count and elapsed time go in DECISIONS.md instead.
+infra/terraform/logs/
 
 # Editors and OS
 .DS_Store

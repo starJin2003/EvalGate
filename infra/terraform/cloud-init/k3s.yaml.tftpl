@@ -1,0 +1,118 @@
+#cloud-config
+# k3s server on Ubuntu 24.04 aarch64, OCI VM.Standard.A1.Flex.
+#
+# Progress is written to /var/log/evalgate-bootstrap.log and the file
+# /var/lib/evalgate/bootstrap.done appears only on success, so a partially
+# booted node is distinguishable from a finished one over SSH.
+
+package_update: true
+package_upgrade: false
+
+# cloud-init's own redirection. Doing this with `exec > >(tee ...)` inside
+# runcmd silently does nothing, because runcmd is executed by /bin/sh and
+# process substitution is a bashism.
+output:
+  all: "| tee -a /var/log/evalgate-bootstrap.log"
+
+# iptables-persistent asks via debconf whether to save the current ruleset.
+# Preseeding it keeps an unattended boot from stalling on that prompt.
+debconf_selections:
+  iptables-persistent: |
+    iptables-persistent iptables-persistent/autosave_v4 boolean true
+    iptables-persistent iptables-persistent/autosave_v6 boolean true
+
+packages:
+  - curl
+  - ca-certificates
+  - iptables-persistent
+  - jq
+
+write_files:
+  # OCI's Ubuntu images ship a restrictive iptables ruleset that rejects
+  # everything except SSH, ahead of any rule k3s adds. Cloud-native traffic and
+  # the pod CIDR are dropped by it, and the failure looks exactly like a broken
+  # CNI. Opening the ports here is what makes the cluster reachable; the NSG in
+  # main.tf only controls what reaches the host in the first place.
+  - path: /usr/local/sbin/evalgate-open-ports.sh
+    permissions: "0755"
+    content: |
+      #!/usr/bin/env bash
+      set -euo pipefail
+
+      # Ports the cluster needs, beyond the SSH rule the image already has.
+      for port in 6443 80 443 10250; do
+        iptables -C INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null \
+          || iptables -I INPUT 1 -p tcp --dport "$port" -j ACCEPT
+      done
+
+      # flannel VXLAN between nodes, and the pod and service CIDRs talking to
+      # the host. Single node today, but the rules cost nothing and their
+      # absence is a silent networking failure the day a second node joins.
+      iptables -C INPUT -p udp --dport 8472 -j ACCEPT 2>/dev/null \
+        || iptables -I INPUT 1 -p udp --dport 8472 -j ACCEPT
+      for cidr in 10.42.0.0/16 10.43.0.0/16; do
+        iptables -C INPUT -s "$cidr" -j ACCEPT 2>/dev/null \
+          || iptables -I INPUT 1 -s "$cidr" -j ACCEPT
+      done
+
+      netfilter-persistent save
+
+# Every block below is POSIX sh, not bash. cloud-init executes runcmd through
+# /bin/sh, which is dash on Ubuntu, and dash rejects `set -o pipefail` outright
+# with "Illegal option". `set -eu` is the portable subset; where the missing
+# pipefail would have mattered, the pipeline is split into a download and a run
+# so a failed fetch cannot be silently piped into a shell.
+#
+# The whole sequence is one block so that a failure anywhere stops it. runcmd
+# entries are otherwise independent, and a partial bootstrap that still wrote
+# bootstrap.done would be worse than no marker at all.
+runcmd:
+  - |
+    set -eu
+
+    mkdir -p /var/lib/evalgate
+    /usr/local/sbin/evalgate-open-ports.sh
+
+    # The public IP is not knowable at template render time, so it is read from
+    # the instance metadata service and baked into the API server certificate.
+    # Without this SAN, kubectl from the Mac fails TLS verification against the
+    # public address and the only fix is reissuing the cert on the node.
+    curl -fsSL -H 'Authorization: Bearer Oracle' \
+      -o /var/lib/evalgate/vnics.json \
+      http://169.254.169.254/opc/v2/vnics/
+    PUBLIC_IP="$(jq -r '.[0].publicIp // empty' /var/lib/evalgate/vnics.json)"
+    if [ -z "$${PUBLIC_IP}" ]; then
+      echo "FATAL: instance metadata reported no public IP" >&2
+      exit 1
+    fi
+    echo "$${PUBLIC_IP}" > /var/lib/evalgate/public-ip
+    echo "public ip: $${PUBLIC_IP}"
+
+    # No --disable-cloud-controller and no cloud-provider=external here. Those
+    # belong with an installed OCI cloud controller manager; without one every
+    # node keeps the uninitialized taint and nothing ever schedules. k3s's
+    # built-in controller and servicelb are what make ports 80 and 443 work.
+    export INSTALL_K3S_VERSION="${k3s_version}"
+    curl -fsSL -o /var/lib/evalgate/get-k3s.sh https://get.k3s.io
+    sh /var/lib/evalgate/get-k3s.sh server \
+      --write-kubeconfig-mode 0644 \
+      --tls-san "$${PUBLIC_IP}" \
+      --node-external-ip "$${PUBLIC_IP}"
+
+    systemctl is-active --quiet k3s
+    k3s kubectl wait --for=condition=Ready node --all --timeout=300s
+
+    # A kubeconfig for the ubuntu user, plus one pointing at the public address
+    # for scp back to the Mac.
+    install -d -o ubuntu -g ubuntu -m 0700 /home/ubuntu/.kube
+    install -o ubuntu -g ubuntu -m 0600 /etc/rancher/k3s/k3s.yaml /home/ubuntu/.kube/config
+    sed "s#https://127.0.0.1:6443#https://$${PUBLIC_IP}:6443#" \
+      /etc/rancher/k3s/k3s.yaml > /home/ubuntu/kubeconfig-public.yaml
+    chown ubuntu:ubuntu /home/ubuntu/kubeconfig-public.yaml
+    chmod 0600 /home/ubuntu/kubeconfig-public.yaml
+
+    k3s kubectl get nodes -o wide
+    date -u +%Y-%m-%dT%H:%M:%SZ > /var/lib/evalgate/bootstrap.done
+    echo "evalgate k3s bootstrap complete"
+
+final_message: "evalgate k3s bootstrap finished after $UPTIME seconds"

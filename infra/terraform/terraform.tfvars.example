@@ -1,0 +1,54 @@
+# Copy to terraform.tfvars and fill in. terraform.tfvars is gitignored.
+#
+# No secrets belong in this file. Credentials live in ~/.oci/config, written by
+# `oci setup config`, and the provider reads them from there. OCIDs are
+# identifiers, not secrets.
+
+# --- Required ---------------------------------------------------------------
+
+# Console: profile menu (top right), then the tenancy name row, then OCID.
+tenancy_ocid = "ocid1.tenancy.oc1..aaaaaaaa_REPLACE_ME"
+
+# --- Optional, defaults are correct for this project ------------------------
+
+# Leave empty to launch into the root compartment (same OCID as the tenancy).
+# Otherwise: Identity & Security, then Compartments, then the compartment OCID.
+# compartment_ocid = "ocid1.compartment.oc1..aaaaaaaa_REPLACE_ME"
+
+# region = "us-chicago-1"
+# oci_config_profile = "DEFAULT"
+
+# The existing VCN and public subnet are looked up by name, never created.
+# vcn_display_name = "evalgate-vcn"
+
+# Leave empty to auto-select the first subnet in the VCN that permits public
+# IPs. Set it if the VCN has more than one public subnet. Copy the name
+# verbatim from the console, spaces included.
+# public_subnet_display_name = "public subnet-evalgate-vcn"
+
+# Narrow this to your own address once the instance exists. It gates SSH (22)
+# and the k3s API (6443); 80 and 443 stay open to the internet either way.
+# Find your address with: curl -s https://checkip.amazonaws.com
+# admin_cidr = "203.0.113.4/32"
+
+# ssh_public_key_path = "~/.ssh/id_ed25519.pub"
+
+# Pin k3s after the first successful boot so a rebuild is reproducible.
+# Read the installed version with: ssh ubuntu@<ip> 'k3s --version'
+# k3s_version = "v1.33.4+k3s1"
+
+# --- Shape ------------------------------------------------------------------
+#
+# 4 OCPU / 24 GB is the Always Free allowance on a PAYG tenancy and what this
+# project is sized for. Do NOT lower these to make a capacity error go away.
+# Out-of-capacity means the AD has no A1 hardware free right now; it is not a
+# signal that the request is too large, and retry-apply.sh exists precisely so
+# that waiting, rather than shrinking, is the response.
+#
+# Dropping to 2 OCPU is the documented BUILD_PLAN.md P2 contingency. It is a
+# DECISION POINT: confirm with a human, log it in DECISIONS.md, and re-run the
+# wrapper with --allow-downsize. Kafka sizing in P4 depends on this number.
+#
+# ocpus         = 4
+# memory_in_gbs = 24
+# boot_volume_size_in_gbs = 50
