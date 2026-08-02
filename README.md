@@ -10,8 +10,10 @@ merges through a GitHub Actions check.
 Full brief in [BUILD_PLAN.md](BUILD_PLAN.md). Running log of decisions, problems, and
 measured numbers in [DECISIONS.md](DECISIONS.md).
 
-> **Status: P1.1 Data (teacher batch in flight).** Corpus, questions, and retrieval are
-> done. The P1.4 harness and the P3 gate are built and tested against stubbed model
+> **Status: P1.1 Data (teacher complete, hand review pending).** Corpus, questions,
+> retrieval, and all 1,900 teacher answers are done — 97.6% valid, $2.89 of the $5.00
+> ceiling. The 96-case golden sample is selected; hand review is the last step before
+> P1.2. The P1.4 harness and the P3 gate are built and tested against stubbed model
 > outputs. P1.2 (MLX LoRA on the M1) and P1.3 (GGUF + llama.cpp) are next; after them
 > the only harness change is pointing the runner at a real endpoint.
 
@@ -164,10 +166,52 @@ uv run evalgate-training teacher poll --wait
 uv run evalgate-training teacher collect
 
 uv run evalgate-training teacher audit         # free: the two poisoning rates
-uv run evalgate-training golden select && uv run evalgate-training golden export
+uv run evalgate-training golden select         # 96-case sample -> artifacts/golden_manifest.json
+uv run evalgate-training golden review         # free, local: hand review, resumable
+uv run evalgate-training golden export
 uv run evalgate-training dataset export
 uv run evalgate-training budget                # cumulative spend
 ```
+
+### Hand review
+
+Teacher output is not ground truth until a human agrees with it, so P1.1 does not
+close until 96 cases have been read by hand.
+
+`golden select` picks the sample: **6 cases per (category, repo) cell** across the
+16 cells, drawn only from rows whose teacher answer passed validation, because
+those are the rows P1.2 will actually train on. There is no RNG — rows are ordered
+by `sha256(GOLDEN_SEED | question_id)`, so the sample is reproducible from the seed
+string and rerunning `golden select` rewrites a byte-identical manifest. A cell with
+fewer than 6 eligible rows is backfilled from elsewhere in the same category and the
+shortfall is recorded in the manifest. The manifest is written **before** any review
+happens, so the sample cannot be reshaped once verdicts start landing.
+
+`golden review` serves the review UI on `127.0.0.1:8765`. It calls no model, judges
+nothing, and summarises nothing: every word on screen is either the question, the
+exact chunks the teacher was given (read back by chunk id, never re-retrieved), or
+the teacher's answer verbatim. One case per screen, answer and chunks in two
+independently scrolling panes, and each `[C3]` marker is a link that opens its chunk
+in the other pane so a citation can be checked without a scroll hunt.
+
+Each case gets a verdict and, when it fails, the **first** criterion it failed:
+
+| # | Criterion | Fails when |
+|---|---|---|
+| 1 | completeness | the answer addresses only part of what was asked |
+| 2 | groundedness | a claim is not supported by the retrieved chunks |
+| 3 | refusal validity | it refused something answerable, or answered something it should have refused |
+| 4 | citation accuracy | a marker points at a chunk that does not say that |
+
+Keyboard: `p` passes, `1`–`4` fail on that criterion, `Enter` saves, arrows navigate.
+
+Every judgment is appended to `artifacts/golden_review.jsonl` before the next case
+loads, so quitting mid-review loses nothing and rerunning `golden review` reopens
+the first unjudged case. The log is **append-only**: rejudging a case appends a
+superseding record rather than editing the old one, so the log keeps the fact that
+the reviewer changed their mind. `golden summary` prints pass rate overall, per
+category, and per failed criterion, and writes the same numbers to
+`artifacts/golden_review_summary.json` once all 96 are judged.
 
 ### Dataset-poisoning guards
 
@@ -231,11 +275,11 @@ over plain HTTPS instead, which works without a git binary.
 `training/artifacts/` is committed: the chunk manifest (metadata only, no doc text),
 the generated dataset, the golden set, and the spend ledger.
 
-**The golden set is never trained on.** 96 cases, 24 per category, selected
-deterministically and frozen in `artifacts/golden_ids.json`. `dataset export` raises
-if any golden id appears in the training split, and a test asserts the same invariant.
-Open `artifacts/golden_review.html` to hand-check the cases — teacher output is not
-ground truth until reviewed.
+**The golden set is never trained on.** 96 cases, 6 per (category, repo) cell,
+selected deterministically and frozen in `artifacts/golden_manifest.json` and
+`artifacts/golden_ids.json`. `dataset export` raises if any golden id appears in the
+training split, and a test asserts the same invariant. Hand-check them with
+`golden review` — teacher output is not ground truth until reviewed.
 
 ## The gate (P1.4 + P3)
 

@@ -14,7 +14,8 @@ Ordered run:
     evalgate-training teacher dry-run         # paid, ~$0.02   <-- STOP, review report
     evalgate-training teacher submit --approve-full-run
     evalgate-training teacher collect
-    evalgate-training golden select
+    evalgate-training golden select           # writes the 96-case manifest
+    evalgate-training golden review           # hand review, localhost, resumable
     evalgate-training golden export
     evalgate-training dataset export
 """
@@ -24,12 +25,15 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import webbrowser
 
 from . import config, db, openai_batch
 from .budget import BudgetExceeded, Ledger
 from .corpus import embed, fetch, parse
 from .corpus.repos import REPOS
 from .golden import export as golden_export
+from .golden import review as golden_review
+from .golden import review_server
 from .golden import select as golden_select
 from .questions import generate, verify
 from .teacher import batch as teacher_batch
@@ -243,13 +247,50 @@ def cmd_teacher_collect(args: argparse.Namespace) -> None:
 
 # --- golden and dataset -------------------------------------------------------
 def cmd_golden_select(args: argparse.Namespace) -> None:
-    _print(golden_select.select(per_category=args.per_category))
+    _print(golden_select.select(per_cell=args.per_cell))
 
 
 def cmd_golden_export(_: argparse.Namespace) -> None:
     counts = golden_export.export_golden()
     _print({"by_category": counts, "jsonl": str(config.GOLDEN_JSONL)})
-    print(f"\nOpen {config.GOLDEN_HTML} in a browser to hand review.")
+    print("\nHand review with:  evalgate-training golden review")
+
+
+def cmd_golden_review(args: argparse.Namespace) -> None:
+    cases, judgments, manifest = golden_review.load_all()
+    server = review_server.serve(cases, args.host, args.port)
+    url = f"http://{args.host}:{server.server_address[1]}"
+
+    if args.case:
+        start = f"{url}/case/{args.case}"
+    else:
+        nxt = golden_review.first_unjudged(cases, judgments)
+        start = f"{url}/case/{nxt}" if nxt else f"{url}/summary"
+
+    print(f"{len(cases)} cases from {config.GOLDEN_MANIFEST_FILE.name}, {len(judgments)} judged.")
+    if manifest.get("shortfalls"):
+        print(f"{len(manifest['shortfalls'])} cell(s) were backfilled; see the manifest.")
+    print(f"Serving {start}\nAppending to {config.GOLDEN_REVIEW_JSONL}\nCtrl-C to stop.")
+    if not args.no_browser:
+        webbrowser.open(start)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print()
+    finally:
+        server.shutdown()
+        server.server_close()
+    cmd_golden_summary(args)
+
+
+def cmd_golden_summary(_: argparse.Namespace) -> None:
+    cases, judgments, _manifest = golden_review.load_all()
+    summary = golden_review.summarize(cases, judgments)
+    print(golden_review.format_summary(summary))
+    if summary["unjudged"] == 0:
+        print(f"\nWritten to {golden_review.write_summary(summary)}")
+    else:
+        print(f"\n{summary['unjudged']} unjudged; resume with `golden review`.")
 
 
 def cmd_dataset_export(_: argparse.Namespace) -> None:
@@ -348,10 +389,19 @@ def build_parser() -> argparse.ArgumentParser:
     ta.set_defaults(func=cmd_teacher_audit)
 
     g = sub.add_parser("golden").add_subparsers(dest="cmd", required=True)
-    gs = g.add_parser("select")
-    gs.add_argument("--per-category", type=int, default=config.GOLDEN_PER_CATEGORY)
+    gs = g.add_parser("select", help="pick the 96-case sample and write the manifest")
+    gs.add_argument("--per-cell", type=int, default=config.GOLDEN_PER_CELL)
     gs.set_defaults(func=cmd_golden_select)
     g.add_parser("export").set_defaults(func=cmd_golden_export)
+    gr = g.add_parser("review", help="hand review the sample in a localhost UI")
+    gr.add_argument("--port", type=int, default=config.REVIEW_PORT)
+    gr.add_argument("--host", default=config.REVIEW_HOST)
+    gr.add_argument("--case", help="open a specific case: 1-based index or question id")
+    gr.add_argument("--no-browser", action="store_true")
+    gr.set_defaults(func=cmd_golden_review)
+    g.add_parser("summary", help="pass rates from the review log").set_defaults(
+        func=cmd_golden_summary
+    )
 
     d = sub.add_parser("dataset").add_subparsers(dest="cmd", required=True)
     d.add_parser("export").set_defaults(func=cmd_dataset_export)

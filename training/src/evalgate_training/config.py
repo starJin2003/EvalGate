@@ -20,7 +20,12 @@ QUESTIONS_FILE = ARTIFACTS_DIR / "questions.jsonl"
 DATASET_FILE = ARTIFACTS_DIR / "dataset.jsonl"
 GOLDEN_IDS_FILE = ARTIFACTS_DIR / "golden_ids.json"
 GOLDEN_JSONL = ARTIFACTS_DIR / "golden_set.jsonl"
-GOLDEN_HTML = ARTIFACTS_DIR / "golden_review.html"
+# Hand-review artifacts. The manifest is written by `golden select` before any
+# review happens, so the sample is fixed in advance and cannot be reshaped after
+# the verdicts start landing. The JSONL is append-only; the summary is derived.
+GOLDEN_MANIFEST_FILE = ARTIFACTS_DIR / "golden_manifest.json"
+GOLDEN_REVIEW_JSONL = ARTIFACTS_DIR / "golden_review.jsonl"
+GOLDEN_REVIEW_SUMMARY = ARTIFACTS_DIR / "golden_review_summary.json"
 LEDGER_FILE = ARTIFACTS_DIR / "ledger.json"
 DRY_RUN_REPORT = ARTIFACTS_DIR / "dry_run_report.json"
 BATCH_STATE_FILE = ARTIFACTS_DIR / "batch_state.json"
@@ -142,7 +147,31 @@ LEAK_SAFETY_MARGIN = 1.10
 # attempts the row is dropped rather than retried, and the drop count is reported.
 MAX_TEACHER_ATTEMPTS = 2
 
-GOLDEN_PER_CATEGORY = 24  # 96 total, inside the 80-100 band
+# Golden sample shape. 6 per (category, repo) cell x 16 cells = 96 cases, inside
+# the 80-100 band BUILD_PLAN asks for. Balanced per cell rather than per category:
+# a category-level quota can silently skew toward the repos with the most eligible
+# rows, and repo is exactly the axis the corpus is most lopsided on.
+GOLDEN_PER_CELL = 6
+GOLDEN_PER_CATEGORY = GOLDEN_PER_CELL * 4  # 24
+
+# Fixed seed for golden selection. Selection uses sha256(seed|question_id) as a
+# sort key, not an RNG, so the sample is reproducible from this string alone and
+# is stable no matter what order the database returns rows in. Changing it
+# reshuffles the entire sample and invalidates any review already recorded.
+GOLDEN_SEED = "evalgate-golden-v1"
+
+# Hand-review criteria, in the order they are presented and recorded. Order is
+# part of the protocol: completeness is judged first because a half-answer that
+# is perfectly grounded and perfectly cited still fails, and reviewing citations
+# first anchors the reviewer on the half that was written.
+REVIEW_CRITERIA: dict[int, str] = {
+    1: "completeness",
+    2: "groundedness",
+    3: "refusal validity",
+    4: "citation accuracy",
+}
+REVIEW_HOST = "127.0.0.1"  # never 0.0.0.0; this UI has no auth
+REVIEW_PORT = 8765
 
 DRY_RUN_SIZE = 20
 
