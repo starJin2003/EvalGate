@@ -1,0 +1,19 @@
+# Copy to backend.hcl and fill in. backend.hcl is gitignored.
+#
+#   terraform init -backend-config=backend.hcl
+#
+# Nothing here is a secret. The S3 credentials are NOT in this file: they live
+# in ~/.aws/credentials under the profile named below, so this file stays safe
+# to read and the secret stays in one place outside the repo.
+
+bucket = "evalgate-tfstate"
+region = "us-chicago-1"
+
+# Profile in ~/.aws/credentials holding the OCI Customer Secret Key.
+profile = "evalgate-tfstate"
+
+# https://<namespace>.compat.objectstorage.<region>.oraclecloud.com
+# Get the namespace with: oci os ns get --raw-output --query data
+endpoints = {
+  s3 = "https://YOUR_NAMESPACE.compat.objectstorage.us-chicago-1.oraclecloud.com"
+}

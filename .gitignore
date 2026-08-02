@@ -40,6 +40,10 @@ training/.scratch/
 *.tfstate.*
 *.tfvars
 !*.tfvars.example
+# Backend config names a tenancy-specific bucket and namespace. Not secret, but
+# not portable either; the S3 credentials themselves live in ~/.aws/credentials.
+backend.hcl
+!backend.hcl.example
 crash.log
 crash.*.log
 # Capacity retry logs. Machine-local run history, not project state; the

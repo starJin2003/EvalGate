@@ -338,8 +338,29 @@ eval "$(terraform output -raw kubectl_tunnel_command)"     # leave running
 KUBECONFIG=~/.kube/evalgate.yaml kubectl get nodes -o wide  # another terminal
 ```
 
-Full design notes, the console recovery path, and how to fix the bootstrap on a
-running node are in [infra/terraform/README.md](infra/terraform/README.md).
+### State
+
+Terraform state lives in **OCI Object Storage**, not on a laptop. The instance
+took a capacity lottery to obtain, so a lost local state file would mean
+terraform no longer knows it exists and recovery would be `terraform import` per
+resource. The bucket is private and **versioned**, and S3-native locking is on,
+verified by two concurrent plans producing `412 PreconditionFailed` on the loser.
+
+OCI has no native Terraform backend, so this is the `s3` backend pointed at
+Object Storage's S3-compatible API. One environment variable is mandatory:
+
+```bash
+export AWS_REQUEST_CHECKSUM_CALCULATION=when_required
+```
+
+Without it every state operation fails as `403 SignatureDoesNotMatch`, which
+looks like a credential problem and is not — the AWS SDK is sending a streaming
+checksum trailer OCI does not implement. Neither `skip_s3_checksum` in the
+backend block nor the equivalent key in `~/.aws/config` substitutes for it.
+
+Full design notes, the bucket setup, the console recovery path, and how to fix
+the bootstrap on a running node are in
+[infra/terraform/README.md](infra/terraform/README.md).
 
 ## Repo layout
 

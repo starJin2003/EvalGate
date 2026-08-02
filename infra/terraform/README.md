@@ -14,6 +14,8 @@ main.tf                     data sources, NSG, instance
 variables.tf                inputs and their validation
 outputs.tf                  IP, AD, and copy-paste follow-up commands
 versions.tf                 provider and auth
+backend.tf                  remote state on OCI Object Storage (partial config)
+backend.hcl.example         copy to backend.hcl, gitignored
 cloud-init/k3s.yaml.tftpl   k3s bootstrap
 retry-apply.sh              the capacity retry loop
 terraform.tfvars.example    copy to terraform.tfvars
@@ -84,6 +86,141 @@ with `curl -s https://checkip.amazonaws.com`.
 Never rebuild the instance to regain access. On this shape, replacing it means
 re-entering the A1 capacity lottery with no guarantee of getting another.
 
+## State backend
+
+State lives in OCI Object Storage, not on a laptop. The instance took a capacity
+lottery to obtain; if the only copy of `terraform.tfstate` were a local file,
+losing it would mean terraform no longer knows the instance exists, and
+recovering would be a hand-written `terraform import` for every resource. A
+remote backend also has to exist before P3, when CI needs to read the same state.
+
+OCI has no native Terraform backend, so this uses the standard **`s3` backend
+against Object Storage's S3-compatible API**. Configuration is split: `backend.tf`
+holds the parts that are true for anyone, and the gitignored `backend.hcl` holds
+the bucket and namespace, which only exist in one tenancy.
+
+### One-time setup
+
+```bash
+NS=$(oci os ns get --raw-output --query data)
+TENANCY=<your tenancy OCID>
+
+# Private, versioned. Versioning is the point: a corrupted or truncated state
+# write is recoverable from a prior object version instead of being terminal.
+oci os bucket create \
+  --compartment-id "$TENANCY" --namespace "$NS" \
+  --name evalgate-tfstate \
+  --public-access-type NoPublicAccess \
+  --versioning Enabled
+```
+
+The S3 API needs an S3-shaped credential, which is not the API signing key used
+everywhere else. Create a **Customer Secret Key** — console path is *profile menu
+→ My profile → Customer secret keys → Generate secret key*, or:
+
+```bash
+oci iam customer-secret-key create --user-id <your user OCID> \
+  --display-name evalgate-tfstate
+```
+
+The secret is shown **once**. Put it in `~/.aws/credentials` (mode `600`), never
+in the repo:
+
+```ini
+[evalgate-tfstate]
+aws_access_key_id     = <the "id" field of the created key>
+aws_secret_access_key = <the "key" field, shown only at creation>
+```
+
+The access key is the key object's `id`, which is unintuitive — it is not a
+separate value shown next to the secret.
+
+Then point the backend at it and initialise:
+
+```bash
+export AWS_REQUEST_CHECKSUM_CALCULATION=when_required   # REQUIRED, see below
+
+cp backend.hcl.example backend.hcl
+$EDITOR backend.hcl                 # bucket, region, profile, namespace endpoint
+terraform init -backend-config=backend.hcl
+```
+
+Every later `init` needs that same `-backend-config=backend.hcl` flag;
+`retry-apply.sh` passes it automatically and refuses to run if the file is
+missing.
+
+### The one environment variable you must export
+
+```bash
+export AWS_REQUEST_CHECKSUM_CALCULATION=when_required
+```
+
+Put it in your shell profile. Without it **every terraform command touching
+state fails**, and the error tells you almost nothing useful:
+
+```
+403 SignatureDoesNotMatch: The secret key required to complete
+authentication could not be found.
+```
+
+That points squarely at credentials, which will be perfectly fine. The real
+cause is that the AWS SDK adds a streaming checksum trailer OCI does not
+implement; on a write you sometimes get the honest version of the error,
+`NotImplemented: AWS chunked encoding not supported`, but on a read it is
+laundered into a signature failure.
+
+Three things that do **not** fix it, all of which look like they should:
+
+- `skip_s3_checksum = true` in the backend block — set, and insufficient
+- `request_checksum_calculation = when_required` in `~/.aws/config` — fixes the
+  `aws` CLI, but terraform's embedded SDK does not read it
+- passing `--profile` or any credential change — the credential is not the problem
+
+`retry-apply.sh` exports it, so the unattended path is safe. Manual `terraform`
+commands are the exposure.
+
+### Locking
+
+`use_lockfile = true` enables S3-native locking: terraform writes a
+`.tflock` object with a conditional PUT, so a second writer is rejected rather
+than silently racing. Verified against OCI — two concurrent plans produce
+`412 PreconditionFailed` on the loser, with the holder recorded:
+
+```
+Error acquiring the state lock
+  ID:        98c7ec5b-...
+  Operation: OperationTypePlan
+  Who:       jin@...
+```
+
+This matters from P3, when a CI runner and a laptop can both hold state. If a
+crash ever leaves a stale lock, `terraform force-unlock <ID>` clears it —
+confirm nothing else is actually running first.
+
+### If the bucket is lost
+
+Object versioning is enabled, so overwritten state is recoverable from a prior
+version rather than gone. The last local state before migration is kept at
+`terraform.tfstate.migrated-to-oci` (gitignored) as a cold fallback. If both
+were somehow lost, recovery is `terraform import` per resource — which is the
+entire reason this backend exists, since the instance itself cannot simply be
+rebuilt on demand.
+
+### Why the flags in backend.tf
+
+The `s3` backend assumes AWS, and every setting there is about it not being AWS:
+`use_path_style` because OCI serves `/<bucket>/<key>` rather than a virtual-host
+subdomain; `skip_s3_checksum` because the AWS SDK's integrity headers are
+rejected by OCI's S3 layer and **every state write fails without it**; and the
+`skip_*` validation flags because each one calls an AWS-only endpoint (STS, IMDS,
+the region catalogue) that does not exist here.
+
+**Newly created Customer Secret Keys are not usable immediately.** Propagation
+takes a few minutes, and until it completes every request fails with
+`SignatureDoesNotMatch: The secret key required to complete authentication could
+not be found`, which reads like a wrong password rather than a delay. If the
+credential is freshly minted, wait and retry before debugging it.
+
 ## Prerequisites
 
 ```bash
@@ -114,7 +251,10 @@ cp terraform.tfvars.example terraform.tfvars
 # Two required values: tenancy_ocid, and admin_cidr as <your-ip>/32.
 # admin_cidr rejects 0.0.0.0/0, so this is a deliberate choice, not a default.
 $EDITOR terraform.tfvars
-terraform init
+
+cp backend.hcl.example backend.hcl   # see "State backend" above
+$EDITOR backend.hcl
+terraform init -backend-config=backend.hcl
 terraform validate
 
 # Read-only. Resolves every data source and proves the VCN, subnet, image, and

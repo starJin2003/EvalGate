@@ -23,6 +23,20 @@ set -uo pipefail
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly LOG_DIR="${SCRIPT_DIR}/logs"
 
+# State lives in OCI Object Storage via the s3 backend. The AWS SDK's streaming
+# checksum trailer is rejected there with "NotImplemented: AWS chunked encoding
+# not supported", and every state write fails without this.
+#
+# It has to be the environment variable. Terraform does not read the equivalent
+# request_checksum_calculation key from ~/.aws/config, and the backend's own
+# skip_s3_checksum setting does not cover it either. Exported here so the
+# unattended path never depends on someone remembering it.
+#
+# Forgetting it surfaces as "403 SignatureDoesNotMatch: The secret key required
+# to complete authentication could not be found", which points at credentials
+# and is entirely misleading.
+export AWS_REQUEST_CHECKSUM_CALCULATION="${AWS_REQUEST_CHECKSUM_CALCULATION:-when_required}"
+
 # --- Tunables. Environment overrides all of them. ----------------------------
 
 # Seconds between attempts on consecutive ADs inside one cycle.
@@ -157,10 +171,23 @@ if (( DRY_RUN == 0 )); then
   [[ -f "${HOME}/.oci/config" ]] \
     || preflight_fail "~/.oci/config missing. Run: oci setup config"
 
+  # State lives in OCI Object Storage through the s3 backend, configured half
+  # here and half in the gitignored backend.hcl.
+  [[ -f backend.hcl ]] \
+    || preflight_fail "backend.hcl missing. Copy backend.hcl.example and fill it in."
+
   if [[ ! -d .terraform ]]; then
     log "terraform init"
-    terraform init -input=false 2>&1 | tee -a "${LOG_FILE}" \
+    terraform init -input=false -backend-config=backend.hcl 2>&1 | tee -a "${LOG_FILE}" \
       || preflight_fail "terraform init failed"
+  fi
+
+  # State is remote and lock-protected, so a second copy of this script would
+  # block on the lock for hours rather than fail fast. Catch it here instead.
+  if terraform state list >/dev/null 2>&1 && terraform state list 2>/dev/null | grep -q '^oci_core_instance\.k3s$'; then
+    log "NOTHING TO DO  an instance already exists in state. The lottery is already won."
+    log "               Run 'terraform output' for its address, or 'terraform state list' to inspect."
+    exit 0
   fi
 fi
 
