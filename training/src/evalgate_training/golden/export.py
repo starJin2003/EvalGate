@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 
 from .. import config, db
-from ..teacher.prompts import SYSTEM as TEACHER_SYSTEM
 
 ROW_SQL = """
     SELECT q.question_id, q.category, q.repo, q.question, q.absent_symbol,
@@ -74,49 +73,3 @@ def export_golden() -> dict[str, int]:
     for row in rows:
         counts[row["category"]] = counts.get(row["category"], 0) + 1
     return counts
-
-
-def export_training() -> dict[str, int]:
-    """Chat-format rows for P1.2. Golden ids are excluded here and the exclusion is
-    asserted, so an accidental leak fails loudly instead of contaminating eval."""
-    rows = _rows("train")
-    golden = set(json.loads(config.GOLDEN_IDS_FILE.read_text())["ids"])
-    leaked = {r["question_id"] for r in rows} & golden
-    if leaked:
-        raise RuntimeError(f"{len(leaked)} golden ids leaked into the training split: {leaked}")
-
-    kept = 0
-    with config.DATASET_FILE.open("w") as fh:
-        for row in rows:
-            if not row["valid"]:
-                continue
-            context = "\n\n---\n\n".join(
-                f"[{c['label']}] repo={c['repo']} | {c['heading_path']}\n"
-                f"source: {c['source_url']}\n\n{c['content']}"
-                for c in row["context"]
-            )
-            fh.write(
-                json.dumps(
-                    {
-                        "question_id": row["question_id"],
-                        "category": row["category"],
-                        "repo": row["repo"],
-                        "refused": row["refused"],
-                        "messages": [
-                            {"role": "system", "content": TEACHER_SYSTEM},
-                            {
-                                "role": "user",
-                                "content": (
-                                    f"Documentation excerpts:\n\n{context}\n\n"
-                                    f"---\n\nQuestion: {row['question']}"
-                                ),
-                            },
-                            {"role": "assistant", "content": row["answer"]},
-                        ],
-                    },
-                    sort_keys=True,
-                )
-                + "\n"
-            )
-            kept += 1
-    return {"train_rows": kept, "skipped_invalid": len(rows) - kept, "golden_excluded": len(golden)}

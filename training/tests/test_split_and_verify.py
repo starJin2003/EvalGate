@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from evalgate_training import config
 from evalgate_training.questions import verify
 
@@ -43,18 +41,41 @@ def test_golden_ids_file_never_overlaps_the_dataset(tmp_path: Path) -> None:
     assert not (golden_ids & train_ids)
 
 
-@pytest.mark.skipif(
-    not config.GOLDEN_IDS_FILE.exists() or not config.DATASET_FILE.exists(),
-    reason="artifacts not generated yet",
-)
-def test_committed_artifacts_are_disjoint() -> None:
+def test_committed_manifest_splits_are_disjoint() -> None:
+    """The eval-integrity guard, run against the **manifest** rather than the
+    rendered splits.
+
+    The splits themselves are gitignored (23 MB of regenerable chunk text), so CI
+    cannot read them. It does not need to: every property that can invalidate an
+    eval number -- a golden case in training, an id in two splits -- is a property
+    of the split *definition*, and `dataset_manifest.json` carries the full
+    per-split id lists and is committed. Byte-level agreement between the manifest
+    and a local rebuild is a different claim, checked by `dataset verify`.
+
+    No skipif. Both files this reads are committed, so a skip here would mean the
+    manifest is missing, which is itself a failure worth seeing.
+    """
     golden_ids = set(json.loads(config.GOLDEN_IDS_FILE.read_text())["ids"])
-    train_ids = {
-        json.loads(line)["question_id"]
-        for line in config.DATASET_FILE.read_text().splitlines()
-        if line.strip()
-    }
-    assert not (golden_ids & train_ids), "golden cases leaked into the training split"
+    manifest = json.loads(config.DATASET_MANIFEST_FILE.read_text())
+    ids = {s: set(manifest["ids"][s]) for s in ("train", "valid", "test")}
+
+    for split, members in ids.items():
+        assert members, f"{split} split is empty in the manifest"
+        assert not (golden_ids & members), f"golden cases leaked into {split}"
+        assert len(members) == manifest["totals"][split], f"{split} id list disagrees with totals"
+
+    assert not (ids["train"] & ids["valid"]), "train and valid share ids"
+    assert not (ids["train"] & ids["test"]), "train and test share ids"
+    assert not (ids["valid"] & ids["test"]), "valid and test share ids"
+    assert sum(manifest["totals"].values()) == manifest["eligible_rows"]
+
+
+def test_committed_manifest_pins_a_digest_for_every_split() -> None:
+    """Without a digest per split, the gitignored files would be unfalsifiable."""
+    manifest = json.loads(config.DATASET_MANIFEST_FILE.read_text())
+    for split in ("train", "valid", "test"):
+        digest = manifest["sha256"][split]
+        assert len(digest) == 64 and set(digest) <= set("0123456789abcdef")
 
 
 def test_quotas_sum_into_the_requested_band() -> None:

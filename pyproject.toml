@@ -8,6 +8,14 @@ dev = [
     "pytest>=8.3",
     "ruff>=0.12",
 ]
+# P1.2 fine tuning. Deliberately NOT a dependency of the `training` member and not
+# in `dev`: MLX is Apple-Silicon-only, and CI runs `uv sync --locked` on
+# ubuntu-24.04-arm, where any hard dependency on it fails to resolve. The marker
+# makes it a no-op off darwin/arm64, and a non-default group means CI never asks
+# for it. Install locally with `uv sync --group mlx`.
+mlx = [
+    "mlx-lm>=0.28; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
 
 [tool.ruff]
 target-version = "py312"

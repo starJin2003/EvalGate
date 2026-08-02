@@ -36,6 +36,17 @@ training/.scratch/
 # committed. `golden review-export` asserts the concatenation, so the batches are
 # regenerable and committing both would duplicate 1.08 MB.
 training/artifacts/review_batches/
+# Rendered P1.2 training splits: ~23 MB, and ~95% of it is corpus chunk text
+# repeated across examples. `corpus fetch` + `corpus parse` rebuild that text for
+# free and deterministically (11.3 s and 3.4 s), so the repo carries the split
+# *definition* instead: dataset_manifest.json holds per-split question_ids plus a
+# sha256 of each rendered file, and `dataset verify` proves a rebuild is
+# byte-identical. Committing the rendered text also means committing upstream
+# documentation verbatim, which is how a Grafana placeholder token in the Grafana
+# docs tripped GitHub push protection on 2026-08-02.
+# NOTE: this does NOT back up the teacher answers, which cost $2.89 and live only
+# in Postgres. See PROGRESS section 6.
+training/artifacts/dataset/
 
 # Terraform (P2)
 # .terraform.lock.hcl IS committed on purpose: it is the provider version pin.

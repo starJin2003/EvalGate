@@ -306,6 +306,77 @@ selected deterministically and frozen in `artifacts/golden_manifest.json` and
 training split, and a test asserts the same invariant. Hand-check them with
 `golden review` — teacher output is not ground truth until reviewed.
 
+## P1.2 — fine tuning on the M1 Pro
+
+Status: prepared and verified, not yet trained. The dataset, the environment, and
+the memory envelope are all measured; the full run has not been started.
+
+MLX is Apple-Silicon-only, so it is **not** a dependency of the `training` package
+and **not** in the `dev` group — CI runs `uv sync --locked` on `ubuntu-24.04-arm`,
+where any hard dependency on it fails to resolve. It lives in its own group behind
+a platform marker:
+
+```bash
+uv sync --group mlx                             # no-op off darwin/arm64
+uv run evalgate-training dataset export         # needs Postgres up
+docker compose -f docker-compose.dev.yml down   # then free the RAM
+```
+
+`dataset export` writes `artifacts/dataset/{train,valid,test}.jsonl` plus
+`artifacts/dataset_manifest.json`. The three names are what `mlx_lm.lora --data`
+expects, and `valid.jsonl` is required — MLX errors without it.
+
+**Only the manifest is committed.** The rendered splits are gitignored: 23 MB, of
+which ~95% is corpus chunk text repeated across examples, and `corpus fetch` +
+`corpus parse` rebuild it deterministically for free (11.3 s + 3.4 s). The manifest
+carries the per-split `question_id` lists and a sha256 of each rendered file, so
+the split is reconstructible and a rebuild is provable:
+
+```bash
+uv run evalgate-training dataset export   # rebuild (needs Postgres)
+uv run evalgate-training dataset verify   # prove it matches the committed manifest
+```
+
+Committing rendered training text also means committing upstream documentation
+verbatim, including whatever placeholder credentials it contains — a Grafana
+`glsa_` example token in Grafana's own docs tripped GitHub push protection once.
+CI checks golden-leak and pairwise disjointness from the manifest's id lists, which
+needs no rendered text; `dataset verify` covers byte-level agreement locally.
+
+**Splits.** 1,758 valid rows → train 1,478 / valid 140 / test 140, held out 8% + 8%
+**per (category, repo) cell** rather than globally, so all 16 cells reach both
+held-out splits. Assignment is `sha256(seed | question_id)`, the same
+no-RNG scheme as `golden select`, so it survives a re-query or a row-order change.
+The golden 96 are excluded from all three and disjointness is asserted at write
+time and again in CI.
+
+**Format** is mlx-lm's chat format. The `prompt`/`completion` format is read first
+by `create_dataset` and rebuilds the turn as user+assistant only, which would
+silently drop the teacher system prompt — where every distilled rule lives.
+
+**Thinking mode is off automatically.** Qwen3's chat template emits an empty
+`<think>\n\n</think>` block ahead of the assistant content for any full
+conversation, regardless of `enable_thinking`. At inference, pass
+`enable_thinking=False` to `apply_chat_template` (llama.cpp: the
+`chat_template_kwargs` request field) to get the same shape.
+
+**Memory is set by sequence length, not weight precision.** Peak GPU memory for one
+LoRA step, measured, against a Metal recommended working set of **12.71 GB**:
+
+| max_seq_len | 8-bit | 8-bit + `--grad-checkpoint` | bf16 + `--grad-checkpoint` |
+|---|---|---|---|
+| 4096 | 15.41 GB | 7.38 GB | 9.02 GB |
+| 5120 | 19.41 GB | 8.87 GB | 10.42 GB |
+| 6528 | 26.66 GB | **10.86 GB** | 12.55 GB |
+
+Dropping bf16 → 8-bit saves ~1.6 GB; gradient checkpointing saves ~16 GB. Use
+`--grad-checkpoint`. Longest example is 6,391 tokens, so 6528 truncates nothing.
+
+**Truncation cuts the answer, not the context.** `iterate_batches` keeps
+`tokens[:max_seq_length]`, and the answer is at the tail — so a too-small limit
+trains the model to emit unterminated answers rather than to answer from unseen
+chunks. At 4096 that would hit 220 of 1,758 rows (12.5%).
+
 ## The gate (P1.4 + P3)
 
 The harness is built against a stubbed model, so the whole merge-blocking path is

@@ -17,8 +17,12 @@ ARTIFACTS_DIR = TRAINING_ROOT / "artifacts"
 
 CHUNK_MANIFEST = ARTIFACTS_DIR / "chunk_manifest.jsonl"
 QUESTIONS_FILE = ARTIFACTS_DIR / "questions.jsonl"
-DATASET_FILE = ARTIFACTS_DIR / "dataset.jsonl"
 GOLDEN_IDS_FILE = ARTIFACTS_DIR / "golden_ids.json"
+# P1.2 training splits. mlx-lm's --data wants a directory holding train.jsonl,
+# valid.jsonl and test.jsonl under exactly those names, so the directory is the
+# artifact and the manifest sits beside it.
+DATASET_DIR = ARTIFACTS_DIR / "dataset"
+DATASET_MANIFEST_FILE = ARTIFACTS_DIR / "dataset_manifest.json"
 GOLDEN_JSONL = ARTIFACTS_DIR / "golden_set.jsonl"
 # Hand-review artifacts. The manifest is written by `golden select` before any
 # review happens, so the sample is fixed in advance and cannot be reshaped after
@@ -96,6 +100,22 @@ def decide_k(comparison_multi_repo_pct: float | None) -> tuple[int, str]:
         f"{COMPARISON_MULTI_REPO_THRESHOLD}%, so k stays {RETRIEVAL_K}",
     )
 
+
+# --- P1.2 training -----------------------------------------------------------
+# MLX bf16 weights of Qwen3 1.7B. BUILD_PLAN P1.2 is explicit that the base is not
+# assumed 4-bit: bf16 is tried first, then 8-bit, then 4-bit, and whichever fits is
+# recorded with its peak memory.
+BASE_MODEL = "mlx-community/Qwen3-1.7B-bf16"
+BASE_MODEL_FALLBACKS = ("mlx-community/Qwen3-1.7B-8bit", "mlx-community/Qwen3-1.7B-4bit")
+
+# Held-out fractions, applied per (category, repo) cell rather than globally so all
+# 16 cells reach valid and test. Separate from the golden 96, which is P1.4's eval
+# set and never enters any of these splits.
+DATASET_TEST_FRAC = 0.08
+DATASET_VALID_FRAC = 0.08
+# Distinct from GOLDEN_SEED on purpose. Reusing it would make the train/test order
+# correlate with the golden sample's order over the same ids.
+DATASET_SPLIT_SEED = "evalgate-dataset-v1"
 
 CATEGORIES = ("factual", "howto", "comparison", "adversarial")
 CATEGORY_QUOTAS = {"factual": 600, "howto": 500, "comparison": 400, "adversarial": 400}

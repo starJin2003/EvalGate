@@ -32,6 +32,7 @@ from . import config, db, openai_batch
 from .budget import BudgetExceeded, Ledger
 from .corpus import embed, fetch, parse
 from .corpus.repos import REPOS
+from .dataset import build as dataset_build
 from .golden import export as golden_export
 from .golden import review as golden_review
 from .golden import review_export as golden_review_export
@@ -300,7 +301,17 @@ def cmd_golden_summary(_: argparse.Namespace) -> None:
 
 
 def cmd_dataset_export(_: argparse.Namespace) -> None:
-    _print(golden_export.export_training())
+    manifest = dataset_build.build()
+    print(dataset_build.format_report(manifest))
+    print(f"\nSplits in {config.DATASET_DIR}\nManifest {config.DATASET_MANIFEST_FILE}")
+    print("Splits are gitignored; only the manifest is committed. Check with `dataset verify`.")
+
+
+def cmd_dataset_verify(_: argparse.Namespace) -> None:
+    result = dataset_build.verify()
+    print(dataset_build.format_verify(result))
+    if not result["ok"]:
+        sys.exit(1)
 
 
 def cmd_budget(_: argparse.Namespace) -> None:
@@ -416,6 +427,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     d = sub.add_parser("dataset").add_subparsers(dest="cmd", required=True)
     d.add_parser("export").set_defaults(func=cmd_dataset_export)
+    d.add_parser(
+        "verify", help="check the gitignored splits against the committed manifest"
+    ).set_defaults(func=cmd_dataset_verify)
 
     sub.add_parser("budget", help="show cumulative spend").set_defaults(func=cmd_budget)
     return p
