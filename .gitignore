@@ -32,6 +32,10 @@ data/
 # Vendored docs corpus and batch payloads. Cloned on demand, never committed.
 # training/artifacts/ IS committed: manifest, dataset, golden set, spend ledger.
 training/.scratch/
+# Review batches are a byte-for-byte re-slice of review_export.jsonl, which is
+# committed. `golden review-export` asserts the concatenation, so the batches are
+# regenerable and committing both would duplicate 1.08 MB.
+training/artifacts/review_batches/
 
 # Terraform (P2)
 # .terraform.lock.hcl IS committed on purpose: it is the provider version pin.

@@ -26,6 +26,11 @@ GOLDEN_JSONL = ARTIFACTS_DIR / "golden_set.jsonl"
 GOLDEN_MANIFEST_FILE = ARTIFACTS_DIR / "golden_manifest.json"
 GOLDEN_REVIEW_JSONL = ARTIFACTS_DIR / "golden_review.jsonl"
 GOLDEN_REVIEW_SUMMARY = ARTIFACTS_DIR / "golden_review_summary.json"
+# Handoff to an external reviewer: the same 96 cases as `golden review`, minus
+# every machine judgment, plus a batched copy so the cases can be split across
+# reviewers or sittings.
+REVIEW_EXPORT_JSONL = ARTIFACTS_DIR / "review_export.jsonl"
+REVIEW_BATCH_DIR = ARTIFACTS_DIR / "review_batches"
 LEDGER_FILE = ARTIFACTS_DIR / "ledger.json"
 DRY_RUN_REPORT = ARTIFACTS_DIR / "dry_run_report.json"
 BATCH_STATE_FILE = ARTIFACTS_DIR / "batch_state.json"
@@ -172,6 +177,8 @@ REVIEW_CRITERIA: dict[int, str] = {
 }
 REVIEW_HOST = "127.0.0.1"  # never 0.0.0.0; this UI has no auth
 REVIEW_PORT = 8765
+# 12 cases per batch file, so 96 splits into 8 even sittings with no remainder.
+REVIEW_BATCH_SIZE = 12
 
 DRY_RUN_SIZE = 20
 

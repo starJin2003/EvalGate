@@ -16,6 +16,7 @@ Ordered run:
     evalgate-training teacher collect
     evalgate-training golden select           # writes the 96-case manifest
     evalgate-training golden review           # hand review, localhost, resumable
+    evalgate-training golden review-export    # the same 96 cases for an outside reviewer
     evalgate-training golden export
     evalgate-training dataset export
 """
@@ -33,6 +34,7 @@ from .corpus import embed, fetch, parse
 from .corpus.repos import REPOS
 from .golden import export as golden_export
 from .golden import review as golden_review
+from .golden import review_export as golden_review_export
 from .golden import review_server
 from .golden import select as golden_select
 from .questions import generate, verify
@@ -283,6 +285,10 @@ def cmd_golden_review(args: argparse.Namespace) -> None:
     cmd_golden_summary(args)
 
 
+def cmd_golden_review_export(args: argparse.Namespace) -> None:
+    print(golden_review_export.format_report(golden_review_export.export_review(args.batch_size)))
+
+
 def cmd_golden_summary(_: argparse.Namespace) -> None:
     cases, judgments, _manifest = golden_review.load_all()
     summary = golden_review.summarize(cases, judgments)
@@ -399,6 +405,11 @@ def build_parser() -> argparse.ArgumentParser:
     gr.add_argument("--case", help="open a specific case: 1-based index or question id")
     gr.add_argument("--no-browser", action="store_true")
     gr.set_defaults(func=cmd_golden_review)
+    gre = g.add_parser(
+        "review-export", help="dump the 96 cases for an external reviewer, no machine judgments"
+    )
+    gre.add_argument("--batch-size", type=int, default=config.REVIEW_BATCH_SIZE)
+    gre.set_defaults(func=cmd_golden_review_export)
     g.add_parser("summary", help="pass rates from the review log").set_defaults(
         func=cmd_golden_summary
     )

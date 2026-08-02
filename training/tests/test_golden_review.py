@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 
 import pytest
 
 from evalgate_training import config
-from evalgate_training.golden import review, review_server
+from evalgate_training.golden import review, review_export, review_server
 from evalgate_training.golden.select import plan
 
 REPOS = ("fastapi", "grafana", "prometheus", "pydantic")
@@ -261,3 +262,87 @@ def test_page_is_self_contained():
     page = review_server.case_page(fake_case("q1"), 1, 96, None, 0)
     for forbidden in ("http://cdn", "https://cdn", "<link", "unpkg", "googleapis"):
         assert forbidden not in page
+
+
+# --- external review export ---------------------------------------------------
+def export_case(qid: str, category: str = "factual", repo: str = "fastapi", body: str = "text"):
+    """A full-width case: one chunk per marker C1..C8, as retrieval attaches."""
+    return review.Case(
+        question_id=qid,
+        category=category,
+        repo=repo,
+        question=f"question {qid}?",
+        absent_symbol=None,
+        answer=f"An answer [C1] for {qid}.",
+        refused=False,
+        context=[
+            review.Chunk(
+                f"C{i}", f"{qid}-chunk-{i}", repo, f"Guide > {i}", f"https://example/{i}", body
+            )
+            for i in range(1, config.RETRIEVAL_K + 1)
+        ],
+    )
+
+
+@pytest.fixture
+def artifacts(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "ARTIFACTS_DIR", tmp_path)
+    monkeypatch.setattr(config, "REVIEW_EXPORT_JSONL", tmp_path / "review_export.jsonl")
+    monkeypatch.setattr(config, "REVIEW_BATCH_DIR", tmp_path / "review_batches")
+    return tmp_path
+
+
+def test_records_are_indexed_in_manifest_order():
+    cases = [export_case(f"q{i}") for i in range(1, 5)]
+    records = review_export.build_records(cases)
+    assert [r["case_index"] for r in records] == [1, 2, 3, 4]
+    assert [r["question_id"] for r in records] == ["q1", "q2", "q3", "q4"]
+    assert [c["marker"] for c in records[0]["chunks"]] == [f"C{i}" for i in range(1, 9)]
+
+
+def test_export_carries_no_machine_judgment():
+    """The reviewer must not see the validator's opinion before reading."""
+    record = review_export.build_records([export_case("q1")])[0]
+    assert tuple(record) == review_export.RECORD_FIELDS
+    for leaked in ("valid", "validation_errors", "refused", "citations", "absent_symbol"):
+        assert leaked not in record
+    for chunk in record["chunks"]:
+        assert tuple(chunk) == review_export.CHUNK_FIELDS
+
+
+def test_chunk_text_is_not_truncated(artifacts):
+    long_body = "x" * 40_000
+    review_export.write_export(review_export.build_records([export_case("q1", body=long_body)]))
+    written = json.loads(config.REVIEW_EXPORT_JSONL.read_text())
+    assert all(c["text"] == long_body for c in written["chunks"])
+
+
+def test_a_case_short_of_k_chunks_fails_loudly():
+    case = export_case("q1")
+    short = dataclasses.replace(case, context=case.context[:7])
+    with pytest.raises(RuntimeError, match="7 chunks"):
+        review_export.build_records([short])
+
+
+def test_batches_split_by_index_and_conserve_every_character(artifacts):
+    records = review_export.build_records([export_case(f"q{i:02d}") for i in range(1, 97)])
+    result = review_export.write_export(records, batch_size=12)
+
+    assert result["records"] == 96
+    assert len(result["batches"]) == 8
+    assert [b["file"] for b in result["batches"]][:2] == ["batch_01.jsonl", "batch_02.jsonl"]
+    assert result["batches"][0]["cases"] == "1-12"
+    assert result["batches"][-1]["cases"] == "85-96"
+    assert sum(b["characters"] for b in result["batches"]) == result["characters"]
+
+    # The 8 batch files reassemble into the export, line for line.
+    joined = "".join(
+        (config.REVIEW_BATCH_DIR / b["file"]).read_text(encoding="utf-8") for b in result["batches"]
+    )
+    assert joined == config.REVIEW_EXPORT_JSONL.read_text(encoding="utf-8")
+
+
+def test_uneven_batch_size_keeps_the_remainder(artifacts):
+    records = review_export.build_records([export_case(f"q{i:02d}") for i in range(1, 97)])
+    result = review_export.write_export(records, batch_size=10)
+    assert [b["records"] for b in result["batches"]] == [10] * 9 + [6]

@@ -168,6 +168,7 @@ uv run evalgate-training teacher collect
 uv run evalgate-training teacher audit         # free: the two poisoning rates
 uv run evalgate-training golden select         # 96-case sample -> artifacts/golden_manifest.json
 uv run evalgate-training golden review         # free, local: hand review, resumable
+uv run evalgate-training golden review-export  # the same 96 cases, as data, for an outside reviewer
 uv run evalgate-training golden export
 uv run evalgate-training dataset export
 uv run evalgate-training budget                # cumulative spend
@@ -212,6 +213,30 @@ superseding record rather than editing the old one, so the log keeps the fact th
 the reviewer changed their mind. `golden summary` prints pass rate overall, per
 category, and per failed criterion, and writes the same numbers to
 `artifacts/golden_review_summary.json` once all 96 are judged.
+
+### Handing the sample to someone else
+
+`golden review-export` writes the same 96 cases, in the same manifest order, as
+JSONL instead of HTML, so the review can happen somewhere this repo is not:
+
+```
+artifacts/review_export.jsonl                     # 96 records, 1,082,249 chars
+artifacts/review_batches/batch_01..08.jsonl       # the same records, 12 per file
+```
+
+Each record is `case_index` (1–96), `question_id`, `category`, `repo`, `question`,
+`teacher_answer`, and `chunks` — 8 objects of `marker` (`C1`–`C8`), `title`, and the
+full chunk `text`. Chunks are read back from the ids stored on the question row,
+never re-retrieved, and never truncated.
+
+What is **not** in the record is the point: no `valid`, no `validation_errors`, no
+`refused`, no parsed citation list. Those are this pipeline's own opinion of the
+answer, and a reviewer who sees them before reading is anchored by them — the
+review would stop being an independent check on the validator. The record is built
+from the same `Case` the UI renders, which has no field to leak them through.
+
+The batch files concatenate back into the export byte for byte, which is asserted
+on every run, so a batch cannot quietly drop or duplicate a case.
 
 ### Dataset-poisoning guards
 
