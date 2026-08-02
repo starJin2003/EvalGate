@@ -50,6 +50,12 @@ training/artifacts/dataset/
 # Scratch output of `dataset restore`. Disposable by design: it exists only to be
 # digest-compared against the manifest and must never be what training reads.
 training/artifacts/restore_check/
+# Adapter weights and raw console logs. `*.safetensors` is already ignored above;
+# this also covers adapter_config.json and the checkpoint dirs.
+# `probe_v1_losses.jsonl` is deliberately NOT ignored -- it is the measurement the
+# learning-rate decision rests on, and it is a few KB.
+training/artifacts/adapters-*/
+training/artifacts/*_console.log
 
 # Terraform (P2)
 # .terraform.lock.hcl IS committed on purpose: it is the provider version pin.

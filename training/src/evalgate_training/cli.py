@@ -42,6 +42,7 @@ from .golden import review_server
 from .golden import select as golden_select
 from .questions import generate, verify
 from .teacher import batch as teacher_batch
+from .train import probe as train_probe
 
 
 def _print(obj: object) -> None:
@@ -328,6 +329,14 @@ def cmd_dataset_restore(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_train_probe(_: argparse.Namespace) -> None:
+    _print(train_probe.run_probe())
+
+
+def cmd_train_trajectory(args: argparse.Namespace) -> None:
+    print(train_probe.format_trajectory(train_probe.read_trajectory(args.log)))
+
+
 def cmd_budget(_: argparse.Namespace) -> None:
     print(Ledger().summary())
 
@@ -441,6 +450,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     d = sub.add_parser("dataset").add_subparsers(dest="cmd", required=True)
     d.add_parser("export").set_defaults(func=cmd_dataset_export)
+
     d.add_parser(
         "verify", help="check the gitignored splits against the committed manifest"
     ).set_defaults(func=cmd_dataset_verify)
@@ -452,6 +462,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     rs.add_argument("--target", help=f"output dir (default {config.RESTORE_DIR})")
     rs.set_defaults(func=cmd_dataset_restore)
+
+    t = sub.add_parser("train").add_subparsers(dest="cmd", required=True)
+    t.add_parser("probe", help="600-iter v1 probe with a durable JSONL loss log").set_defaults(
+        func=cmd_train_probe
+    )
+    tj = t.add_parser("trajectory", help="print the probe loss trajectory from its log")
+    tj.add_argument("--log", help=f"default {config.TRAIN_PROBE['loss_log']}")
+    tj.set_defaults(func=cmd_train_trajectory)
 
     sub.add_parser("budget", help="show cumulative spend").set_defaults(func=cmd_budget)
     return p

@@ -125,6 +125,35 @@ DATASET_VALID_FRAC = 0.08
 # correlate with the golden sample's order over the same ids.
 DATASET_SPLIT_SEED = "evalgate-dataset-v1"
 
+# --- P1.2 training schedule ---------------------------------------------------
+# The 600-iter probe. Every value here is the value the full 2,956-iter v1 run will
+# use, except `iters`, so the probe measures the schedule rather than resembling it.
+# Whatever v1 ends up using, v2 inherits unchanged -- the mix is the only variable.
+#
+# Defaults inherited from mlx_lm.lora.CONFIG_DEFAULTS and left alone: num_layers 16,
+# lora rank 8 / scale 20.0 / dropout 0.0, steps_per_eval 200, val_batches 25,
+# optimizer adam, seed 0. Everything else below is a deliberate override, because
+# mlx-lm's defaults target Qwen3-0.6B on WikiSQL at ~100 tokens per example.
+TRAIN_ADAPTER_DIR = ARTIFACTS_DIR / "adapters-v1-probe"
+TRAIN_PROBE: dict = {
+    "model": "mlx-community/Qwen3-1.7B-8bit",
+    "data": str(DATASET_DIR),
+    "train": True,
+    "iters": 600,
+    "batch_size": 1,  # 2 needs 18.69 GB at seq 6528, over the 12.71 GB ceiling
+    "grad_accumulation_steps": 4,
+    "learning_rate": 5e-5,
+    "lr_schedule": None,  # constant: --resume-adapter-file restores weights only
+    "num_layers": 16,
+    "lora_parameters": {"rank": 8, "dropout": 0.0, "scale": 20.0},
+    "max_seq_length": 6528,  # 0 of 1,758 examples truncated; max observed 6,391
+    "grad_checkpoint": True,  # saves ~16 GB; without it bf16 hit 21.36 GB and swapped
+    "mask_prompt": True,  # loss on the answer, not on ~2,800 tokens of retrieved docs
+    "save_every": 200,
+    "adapter_path": str(TRAIN_ADAPTER_DIR),
+    "loss_log": str(ARTIFACTS_DIR / "probe_v1_losses.jsonl"),
+}
+
 CATEGORIES = ("factual", "howto", "comparison", "adversarial")
 CATEGORY_QUOTAS = {"factual": 600, "howto": 500, "comparison": 400, "adversarial": 400}
 QUESTIONS_PER_CALL = 5

@@ -16,7 +16,7 @@ Last updated 2026-08-02.
 |---|---|
 | P0 Bootstrap | Done 2026-07-31 |
 | P1.1 Data | **Done 2026-08-02.** 1,900 answered, 1,854 valid (97.6%), $2.89 of $5.00. Hand review 92/96 = 95.8%, criteria 3 and 4 clean. Acceptance rule fired as written |
-| P1.2 Training | **Prepared 2026-08-02, not trained.** Splits 1478/140/140, mlx-lm 0.31.3 installed, base model down, 20-step smoke test green at 9.1 GB peak. Awaiting the sequence-length sign-off, then the real run |
+| P1.2 Training | **Probe ready to launch 2026-08-02, not started.** Splits 1478/140/140, schedule agreed, 600-iter v1 probe at 5e-5 pending a manual launch. Full 2,956-iter run gated on the pre-committed LR reading rule |
 | P1.3 Serving | Not started |
 | P1.4 Harness | Built against stubs 2026-08-01; needs a real endpoint at P1.3 |
 | P2 Infra | **Provisioning done 2026-08-02.** Node live, k3s up, remote state. Deploys, monitoring, and k6 not started |
@@ -137,37 +137,46 @@ Two independent threads.
 
 The command, once the length is agreed:
 
-**No Postgres needed.** The splits come from committed files:
+**Tonight is a 600-iter probe, not the 2,956-iter run.** The schedule is agreed; the learning rate is the one number with no evidence behind it, and getting it wrong costs 18 hours because v2 inherits whatever v1 uses. The probe changes **only `iters`** — every other knob is the value the full run will use, and because the LR is constant, iters 1-600 of the probe *are* iters 1-600 of v1 rather than a simulation of them.
+
+Launch it manually. `caffeinate -is` blocks idle sleep, `nohup` survives closing the terminal:
 
 ```bash
+cd /Users/jin/Desktop/Dev/EvalGate
 uv sync --group mlx
-uv run evalgate-training dataset restore --target training/artifacts/dataset
+uv run evalgate-training dataset restore --target training/artifacts/dataset   # no Postgres
 
-uv run python -m mlx_lm lora --model mlx-community/Qwen3-1.7B-8bit \
-  --train --data training/artifacts/dataset \
-  --max-seq-length 6528 --grad-checkpoint --mask-prompt \
-  --batch-size 1 --grad-accumulation-steps 4 \
-  --num-layers 16 --learning-rate 5e-5 \
-  --iters 2956 --steps-per-eval 200 --val-batches 25 --save-every 200 \
-  --adapter-path training/artifacts/adapters-v1
+nohup caffeinate -is env HF_HUB_OFFLINE=1 \
+  uv run evalgate-training train probe \
+  > training/artifacts/probe_v1_console.log 2>&1 &
+echo $! > /tmp/evalgate_probe.pid
 ```
 
-**Proposed schedule, awaiting sign-off.** 2,956 iters at batch 1 is exactly **2 epochs** over 1,478 examples: ~8.6 h of steps plus ~0.4 h of validation, so **~9 h per version and ~18 h for v1 and v2 together**. Sequence length 6528 and 8-bit + grad-checkpoint are already decided. The rest:
+In the morning, without needing a session:
+
+```bash
+uv run evalgate-training train trajectory      # reads probe_v1_losses.jsonl
+tail -40 training/artifacts/probe_v1_console.log
+```
+
+**How to read it — the rule is pre-committed in DECISIONS.md, written before the run started.** Evals land at iters 200, 400, 600 against an untrained baseline at iter 1. Short form: **right** = all three fall and the 400→600 drop is smaller than 200→400; **too high** = any eval rises above its predecessor, or a `nan`/`inf` train loss, or val at 600 not below val at 200 → retry at 2e-5; **too low** = monotonic but under 15% total drop from baseline, or still perfectly linear → retry at 1e-4. Ambiguous counts as too low.
 
 | Knob | Value | mlx-lm default? |
 |---|---|---|
-| `--iters` | 2956 (2 epochs) | no, default 1000 (a WikiSQL demo length) |
-| `--batch-size` | 1 | no, default 4 — measured 18.69 GB at seq 6528 |
+| `--iters` | 600 probe / 2956 full (2 epochs) | no, default 1000 (a WikiSQL demo length) |
+| `--batch-size` | 1 | no, default 4 — 2 needs 18.69 GB at seq 6528 |
 | `--grad-accumulation-steps` | 4 | no, default 1 |
 | `--num-layers` | 16 | **yes**, and it measures well here (10.98 GB) |
-| LoRA rank / scale | 8 / 20.0 | **yes** both |
+| LoRA rank / scale / dropout | 8 / 20.0 / 0.0 | **yes**, all three |
 | `--learning-rate` | 5e-5 constant | no, default 1e-5; no schedule, for resume safety |
 | `--steps-per-eval` / `--val-batches` | 200 / 25 | **yes** both |
 | `--save-every` | 200 | no, default 100 |
 
-**Checkpoint before committing 18 hours:** v1's val loss at iter ~600 (~1.8 h) is the first real evidence on whether 2 epochs is right. The epoch count rests on general SFT practice for 1-10k-example sets, not on anything measured here.
+**Lid, terminal, network.** `nohup` means closing the terminal or ending the SSH session does not kill it. `caffeinate -is` prevents *idle* sleep only — **closing the lid still suspends the machine** on Apple Silicon without an external display, and the run suspends with it rather than dying, resuming on wake with the elapsed timings distorted. Leave the lid open and stay on mains power. `HF_HUB_OFFLINE=1` is set so the cached model and tokenizer are used without a network round trip; verified working. Postgres stays down throughout — the splits come from `dataset restore`.
 
-**If the run dies at hour 3.** `--save-every 200` writes both `adapters.safetensors` and numbered `0000600_adapters.safetensors` checkpoints. Resume with `--resume-adapter-file <newest numbered file> --iters <remaining>`. Be aware this is a **warm restart, not an exact continuation**: mlx-lm restores adapter weights only — Adam moments reset to zero, the data iterator reshuffles, and the iteration counter starts over. Constant LR is chosen precisely so the schedule is not also lost. mlx-lm never picks a best checkpoint for you, so select on val loss at the end.
+**If it dies at hour 3.** `--save-every 200` writes `adapters.safetensors` plus numbered `0000200_adapters.safetensors` checkpoints, all kept. Resume with `--resume-adapter-file <newest numbered> --iters <remaining>`. This is a **warm restart, not an exact continuation**: mlx-lm restores adapter weights only — Adam moments reset to zero, the data iterator reshuffles, the counter starts over. Constant LR is chosen precisely so the schedule is not lost too. mlx-lm never selects a best checkpoint, so choose on val loss.
+
+**What the 600-iter adapter is good for.** It is a **structurally valid, undertrained adapter** — correct shape, correct `adapter_config.json`, loadable by `mlx_lm.fuse` and convertible to GGUF exactly like a finished one. So **P1.3 conversion work can start against it tomorrow morning in parallel with the real run**: fuse → convert → quantize Q4_K_M → `llama-server`, and confirm the served model emits `[C1]`-style citations and refuses. What it is **not** good for is any number that goes in a report — 600 iters is 0.41 epochs, no category is exercised enough for a per-category rate to mean anything, and it must never become v1. Build the pipeline against it; throw the weights away.
 
 Then `mlx_lm.fuse`, P1.3 (GGUF + llama.cpp), and P1.4, which is already built against stubs and needs only the runner pointed at a real endpoint. Two questions from the hand review travel into the P1.2 eval and are recorded in section 6: whether fastapi underperforms, and whether comparison refusals exceed the teacher's 36%.
 
@@ -178,6 +187,8 @@ Nothing in P2's remainder blocks P1.2, and P1.2 blocks nothing in P2 except the 
 ## 8. Session log
 
 Newest first. Three to five lines each. What was attempted, what landed, what broke, what the next session needs to know.
+
+**2026-08-02 Probe harness built; 600-iter v1 probe ready to launch, not started.** The schedule was accepted with one change: tonight is a 600-iter probe at 5e-5, not the 2,956-iter run, because the LR was the one number with no evidence behind it and v2 inherits whatever v1 uses — a wrong LR costs 18 hours, not 9. The probe varies **only `iters`**; since the LR is constant, its 600 iterations are literally the first 1.7 hours of v1 rather than a proxy for them. **The reading rule is pre-committed in DECISIONS.md, written before the run started**, with explicit bands for right / too high / too low against the untrained baseline, and ambiguous cases resolving to too-low — the pressure at 8am is one-directional, since the alternative to "the curve looks fine" is redoing a matched 18-hour pair. Losses go to `probe_v1_losses.jsonl` via a thin wrapper around mlx-lm rather than being scraped from stdout: `mlx_lm.lora.run()` accepts a `training_callback` and then overwrites it with `get_reporting_callbacks()`, whose only backends are wandb, mlflow and tensorboard, so the wrapper mirrors `run()`'s ~20 lines and hands the callback to `train_model` directly. Validated the harness on 2 iters before handing it over — it ran offline under `HF_HUB_OFFLINE=1`, applied 5.000e-05, put LoRA on 16 layers for 4.981M trainable params, and wrote its numbered checkpoint. That check caught a real defect: mlx-lm reports val at `it - 1` and train at `it`, so joining the series on iteration would have silently dropped every training point from the morning report. **The 600-iter adapter is deliberately usable for P1.3 pipeline work** — structurally valid and GGUF-convertible, so fuse/convert/serve can be built against it in parallel with the real run — but it is 0.41 epochs and must never become v1 or appear in any reported number.
 
 **2026-08-02 Recovery artifact built and proven; training schedule proposed.** `recovery.jsonl` is 1,900 rows and 2.0 MB — question, absent_symbol, split, retrieved chunk **ids**, answer, refused, citations, valid, validation_errors. All 1,900 rather than the 1,758 trainable: the 46 invalid rows are the evidence behind the 97.6% validity number and the 96 golden rows are the hand review's subject, and a backup that cannot reproduce the review has not backed up most of what P1.1 bought. **The restore is proven, not asserted.** With Postgres stopped, `dataset restore` re-parsed 6,178 corpus chunks, cross-checked every one against the committed `chunk_manifest.jsonl` (0 mismatches, 0 missing), and rebuilt all three splits **byte-identical** to `dataset_manifest.json`. That match is what turns "chunk text is free to regenerate" from a claim into a measurement. Side effect worth having: **P1.2 no longer needs Postgres at all**, since `dataset restore --target training/artifacts/dataset` reconstructs the training inputs from committed files. Both pre-commit checks came back clean — an 8-pattern secret sweep over every field of all 1,900 rows found zero matches (chunk ids are kept, chunk text never is, and no teacher answer quotes the placeholder), and the golden 96 are identifiable by `split`, match `golden_ids.json` exactly, and every hand-review verdict still joins. Six new tests guard all of it in CI, including the sweep, so the next corpus refresh that pulls in a placeholder credential fails a test instead of GitHub push protection. Suite is 178 passed, 0 skipped. **Schedule proposed and not started:** 2,956 iters = 2 epochs, batch 1 with 4-step accumulation, 16 layers at rank 8, 5e-5 constant, ~9 h per version and ~18 h for both. Two measurements settled open questions — batch 2 is disqualified because it needs 18.69 GB on a 6,528-token batch against a 12.71 GB ceiling, and layer count and rank turn out to be nearly free next to sequence length. v1 and v2 will hold optimizer steps identical so the refusal collapse is attributable to the mix; constant-size remixing was checked and is impossible, since all 1,758 valid rows are already allocated.
 
