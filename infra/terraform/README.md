@@ -37,11 +37,63 @@ editing its security list would mean this configuration mutates something it
 does not own, and `terraform destroy` would leave the VCN altered. The NSG is
 additive and disappears cleanly with the instance.
 
+## Network exposure
+
+| Port | Source | Variable | Why |
+|---|---|---|---|
+| 22 | your address only | `admin_cidr` | The single administrative entry point, and the transport for the kube API tunnel |
+| 80, 443 | the whole internet | `public_ingress_cidr` | The traefik ingress. Public **by design** — from P3 the eval gate is called by GitHub Actions runners, whose egress addresses rotate across a range too large to allowlist |
+| 6443 | **nobody** | — no rule exists | The k3s API is not on the internet at all |
+
+The two CIDRs are separate variables that never reference each other. Tightening
+SSH cannot take the public API offline, and opening the web ports cannot widen
+administrative access. `admin_cidr` has a validation rule rejecting `0.0.0.0/0`
+outright, so world-open SSH takes a deliberate edit rather than a forgotten
+default.
+
+### Reaching the kube API
+
+There is no ingress rule for 6443, so `kubectl` goes through an SSH tunnel. The
+node's kubeconfig already points at `127.0.0.1:6443`, which is exactly what the
+tunnel forwards, so it needs no editing:
+
+```bash
+eval "$(terraform output -raw fetch_kubeconfig_command)"   # once
+
+eval "$(terraform output -raw kubectl_tunnel_command)"     # leave running
+# in another terminal:
+KUBECONFIG=~/.kube/evalgate.yaml kubectl get nodes -o wide
+```
+
+Close the tunnel and `kubectl` fails with connection refused. That is the
+intended and verified behaviour: there is no second path to the API.
+
+### Locked out because your IP changed? Do not panic
+
+**You cannot lock yourself out of recovery, because recovery is a browser, not
+SSH.** Edit the NSG rule from the OCI console anywhere:
+
+> **Networking** → **Virtual cloud networks** → `evalgate-vcn` → **Network
+> security groups** → `evalgate-k3s-nsg` → **Security rules** → edit the port 22
+> ingress rule's source CIDR.
+
+Then set `admin_cidr` in `terraform.tfvars` to the new value so the next
+`terraform apply` does not revert your console edit. Get the current address
+with `curl -s https://checkip.amazonaws.com`.
+
+Never rebuild the instance to regain access. On this shape, replacing it means
+re-entering the A1 capacity lottery with no guarantee of getting another.
+
 ## Prerequisites
 
 ```bash
 brew install terraform oci-cli
 oci setup config          # writes ~/.oci/config, then upload the public key
+
+# Project-scoped SSH key. Separate from the OCI API key, and deliberately not
+# ~/.ssh/id_ed25519, so this stack neither depends on nor claims the machine's
+# default identity. Terraform only ever reads the .pub half.
+ssh-keygen -t ed25519 -f ~/.ssh/evalgate_ed25519 -N "" -C "evalgate-oci-k3s"
 ```
 
 `oci setup config` prompts for the user OCID, tenancy OCID, region
@@ -59,11 +111,22 @@ oci iam availability-domain list --output table   # must print 3 rows
 ```bash
 cd infra/terraform
 cp terraform.tfvars.example terraform.tfvars
-$EDITOR terraform.tfvars          # tenancy_ocid is the only required value
+# Two required values: tenancy_ocid, and admin_cidr as <your-ip>/32.
+# admin_cidr rejects 0.0.0.0/0, so this is a deliberate choice, not a default.
+$EDITOR terraform.tfvars
 terraform init
+terraform validate
+
+# Read-only. Resolves every data source and proves the VCN, subnet, image, and
+# SSH key all exist, without calling LaunchInstance or touching the rate limit.
+terraform plan
 
 ./retry-apply.sh
 ```
+
+Always `plan` before starting the loop. A misconfiguration caught here costs
+seconds; the same mistake caught inside the loop is classified `fatal`, stops
+the run, and wastes however long it took you to notice.
 
 Leave it running. It is designed to be left alone for hours or days:
 
@@ -124,11 +187,8 @@ Ready, and the kubeconfigs are written. Until then, tail
 `runcmd` block so a failure partway through cannot leave the `.done` marker
 behind.
 
-Then pull the kubeconfig:
-
-```bash
-eval "$(terraform output -raw fetch_kubeconfig_command)"
-```
+Then pull the kubeconfig and open a tunnel — see [Reaching the kube
+API](#reaching-the-kube-api) above.
 
 Record in DECISIONS.md: attempts and total elapsed time from the retry log,
 which AD paid out, apply wall time, and the k3s version that landed.
@@ -145,9 +205,27 @@ per-region and rotate with every Canonical release. Filtering on the A1 shape is
 what makes the result aarch64; "Minimal" builds are excluded because they omit
 cloud-init modules used here.
 
-**`ignore_changes` on the image OCID.** A new Ubuntu release must never destroy
-and recreate an instance that took days of retries to obtain. Rebuilding onto a
-newer image is a deliberate act, not a side effect of running `apply` again.
+**`ignore_changes` on the image OCID and on `metadata["user_data"]`.** A new
+Ubuntu release must never destroy and recreate an instance that took days of
+retries to obtain, and neither should editing the bootstrap. `user_data` runs
+once, at first boot, so a running node cannot be affected by changing it — the
+diff has no upside and one very large downside. Fixes go to the live node
+directly (see below) and land in the template for the next build. The ignore is
+scoped to that one map key, so `ssh_authorized_keys` still updates in place and
+SSH key rotation remains a normal apply.
+
+**Fixing the bootstrap on a running node.** Because cloud-init only runs at
+first boot, a template fix does not reach an existing instance. Render the
+`runcmd` block and run it over SSH rather than replacing the instance:
+
+```bash
+python3 -c "import yaml,sys; d=yaml.safe_load(open('/tmp/rendered.yaml')); print(d['runcmd'][0])" > /tmp/bootstrap.sh
+scp -i ~/.ssh/evalgate_ed25519 /tmp/bootstrap.sh ubuntu@<ip>:/tmp/
+ssh -i ~/.ssh/evalgate_ed25519 ubuntu@<ip> 'sudo sh /tmp/bootstrap.sh'
+```
+
+The k3s install script and the port script are both re-runnable, so this is
+safe to repeat.
 
 **`create` timeout of 15 minutes**, below the 20 minute provider default, so a
 stalled launch returns to the loop and moves to the next AD instead of parking

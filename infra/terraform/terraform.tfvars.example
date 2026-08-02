@@ -26,12 +26,33 @@ tenancy_ocid = "ocid1.tenancy.oc1..aaaaaaaa_REPLACE_ME"
 # verbatim from the console, spaces included.
 # public_subnet_display_name = "public subnet-evalgate-vcn"
 
-# Narrow this to your own address once the instance exists. It gates SSH (22)
-# and the k3s API (6443); 80 and 443 stay open to the internet either way.
-# Find your address with: curl -s https://checkip.amazonaws.com
-# admin_cidr = "203.0.113.4/32"
+# REQUIRED. Gates SSH (port 22) and nothing else. A validation rule rejects
+# 0.0.0.0/0, so this must be a deliberate choice.
+#   curl -s https://checkip.amazonaws.com
+#
+# There is no ingress rule for the k3s API on 6443 at all; kubectl reaches it
+# through an SSH tunnel. See `terraform output kubectl_tunnel_command`.
+#
+# If your address changes you are NOT locked out. Edit the port 22 rule on the
+# evalgate-k3s-nsg security group in the OCI console from any browser, then
+# update this value so terraform stops reverting it. Full path in README.md.
+admin_cidr = "203.0.113.4/32"
 
-# ssh_public_key_path = "~/.ssh/id_ed25519.pub"
+# Ports 80 and 443. Separate from admin_cidr on purpose so the two can never
+# move together. Public by design: from P3 the eval gate is called by GitHub
+# Actions runners, whose egress addresses cannot be usefully allowlisted.
+# public_ingress_cidr = "0.0.0.0/0"
+
+# Extra SANs for the k3s API certificate. Empty is correct while the API is
+# reachable only through an SSH tunnel; k3s always includes 127.0.0.1. Do not
+# reintroduce a boot-time public IP lookup: OCI's metadata service does not
+# expose one. See README.md.
+# extra_tls_sans = ["203.0.113.9"]
+
+# Project-scoped by default so this stack neither depends on nor claims the
+# machine's default identity. Generate it with:
+#   ssh-keygen -t ed25519 -f ~/.ssh/evalgate_ed25519 -N "" -C "evalgate-oci-k3s"
+# ssh_public_key_path = "~/.ssh/evalgate_ed25519.pub"
 
 # Pin k3s after the first successful boot so a rebuild is reproducible.
 # Read the installed version with: ssh ubuntu@<ip> 'k3s --version'

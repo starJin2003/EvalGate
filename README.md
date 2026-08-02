@@ -313,8 +313,33 @@ assumption P4's Kafka sizing rests on. The wrapper exits 3 below 4 OCPU unless
 
 The VCN and public subnet are **looked up, never created** — they already exist,
 and the ingress rules go in an NSG on the instance VNIC so `terraform destroy`
-leaves shared infrastructure exactly as it was found. Full design notes and the
-follow-up commands are in [infra/terraform/README.md](infra/terraform/README.md).
+leaves shared infrastructure exactly as it was found.
+
+### Network exposure
+
+| Port | Source | Why |
+|---|---|---|
+| 22 | operator `/32` | The only administrative entry point, and the transport for the kube API tunnel |
+| 80, 443 | the internet | The traefik ingress. Public **by design**: the P3 gate is called by GitHub Actions runners, whose egress ranges cannot be usefully allowlisted |
+| 6443 | **nobody** | No rule exists. The k3s control plane is not on the internet |
+
+`admin_cidr` and `public_ingress_cidr` are separate variables that never
+reference each other, so tightening SSH cannot take the public API offline and
+opening the web ports cannot widen SSH. `admin_cidr` rejects `0.0.0.0/0` by
+validation — the recovery path for a too-narrow value is the OCI console in a
+browser, which never depends on SSH, so failing closed is the cheap direction.
+
+`kubectl` reaches the API through an SSH tunnel; the node's kubeconfig already
+points at `127.0.0.1:6443` and needs no editing:
+
+```bash
+eval "$(terraform output -raw fetch_kubeconfig_command)"   # once
+eval "$(terraform output -raw kubectl_tunnel_command)"     # leave running
+KUBECONFIG=~/.kube/evalgate.yaml kubectl get nodes -o wide  # another terminal
+```
+
+Full design notes, the console recovery path, and how to fix the bootstrap on a
+running node are in [infra/terraform/README.md](infra/terraform/README.md).
 
 ## Repo layout
 

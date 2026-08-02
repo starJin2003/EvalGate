@@ -73,43 +73,50 @@ runcmd:
     mkdir -p /var/lib/evalgate
     /usr/local/sbin/evalgate-open-ports.sh
 
-    # The public IP is not knowable at template render time, so it is read from
-    # the instance metadata service and baked into the API server certificate.
-    # Without this SAN, kubectl from the Mac fails TLS verification against the
-    # public address and the only fix is reissuing the cert on the node.
-    curl -fsSL -H 'Authorization: Bearer Oracle' \
-      -o /var/lib/evalgate/vnics.json \
-      http://169.254.169.254/opc/v2/vnics/
-    PUBLIC_IP="$(jq -r '.[0].publicIp // empty' /var/lib/evalgate/vnics.json)"
-    if [ -z "$${PUBLIC_IP}" ]; then
-      echo "FATAL: instance metadata reported no public IP" >&2
-      exit 1
-    fi
-    echo "$${PUBLIC_IP}" > /var/lib/evalgate/public-ip
-    echo "public ip: $${PUBLIC_IP}"
-
-    # No --disable-cloud-controller and no cloud-provider=external here. Those
-    # belong with an installed OCI cloud controller manager; without one every
-    # node keeps the uninitialized taint and nothing ever schedules. k3s's
-    # built-in controller and servicelb are what make ports 80 and 443 work.
+    # The node's public IP is deliberately NOT looked up here.
+    #
+    # An earlier version read it from http://169.254.169.254/opc/v2/vnics/ to
+    # bake into the API server certificate. That endpoint has no publicIp
+    # field: it reports macAddr, privateIp, subnetCidrBlock, virtualRouterIp,
+    # vlanTag, and vnicId, and nothing else. The lookup could never have
+    # succeeded on any boot.
+    #
+    # It is also no longer needed. Port 6443 is closed to the internet, kubectl
+    # reaches the API through an SSH tunnel, and k3s always includes 127.0.0.1
+    # in the certificate. Any additional SAN is an explicit operator choice via
+    # the extra_tls_sans variable, not something inferred at boot.
+    #
+    # No --disable-cloud-controller and no cloud-provider=external either.
+    # Those belong with an installed OCI cloud controller manager; without one
+    # every node keeps the uninitialized taint and nothing ever schedules.
+    # k3s's built-in controller and servicelb are what make 80 and 443 work.
     export INSTALL_K3S_VERSION="${k3s_version}"
     curl -fsSL -o /var/lib/evalgate/get-k3s.sh https://get.k3s.io
     sh /var/lib/evalgate/get-k3s.sh server \
       --write-kubeconfig-mode 0644 \
-      --tls-san "$${PUBLIC_IP}" \
-      --node-external-ip "$${PUBLIC_IP}"
+      ${tls_san_flags}
 
     systemctl is-active --quiet k3s
+
+    # `kubectl wait --all` does not wait for a resource to exist: with no node
+    # registered yet it matches nothing and exits non-zero immediately, which
+    # under `set -e` aborts the bootstrap a second or two after k3s starts.
+    # Wait for the node object to appear first, then wait on its condition.
+    i=0
+    while [ "$(k3s kubectl get nodes --no-headers 2>/dev/null | wc -l)" -eq 0 ]; do
+      i=$((i + 1))
+      if [ "$i" -gt 60 ]; then
+        echo "FATAL: k3s registered no node within 300s" >&2
+        exit 1
+      fi
+      sleep 5
+    done
     k3s kubectl wait --for=condition=Ready node --all --timeout=300s
 
-    # A kubeconfig for the ubuntu user, plus one pointing at the public address
-    # for scp back to the Mac.
+    # Kubeconfig for the ubuntu user. It points at 127.0.0.1:6443, which is
+    # exactly what an SSH tunnel needs, so it works unmodified once forwarded.
     install -d -o ubuntu -g ubuntu -m 0700 /home/ubuntu/.kube
     install -o ubuntu -g ubuntu -m 0600 /etc/rancher/k3s/k3s.yaml /home/ubuntu/.kube/config
-    sed "s#https://127.0.0.1:6443#https://$${PUBLIC_IP}:6443#" \
-      /etc/rancher/k3s/k3s.yaml > /home/ubuntu/kubeconfig-public.yaml
-    chown ubuntu:ubuntu /home/ubuntu/kubeconfig-public.yaml
-    chmod 0600 /home/ubuntu/kubeconfig-public.yaml
 
     k3s kubectl get nodes -o wide
     date -u +%Y-%m-%dT%H:%M:%SZ > /var/lib/evalgate/bootstrap.done

@@ -98,13 +98,21 @@ resource "oci_core_network_security_group_security_rule" "egress_all" {
   description               = "All outbound. k3s pulls images and charts."
 }
 
+# --- Administrative ingress: SSH only, restricted to one operator address ----
+#
+# There is deliberately NO rule for the k3s API on 6443. Nothing outside the
+# node needs to reach it: kubectl and helm run either on the node or through an
+# SSH tunnel (see the kubectl_tunnel_command output). Closing it removes the
+# cluster's control plane from the public internet entirely, and the SSH rule
+# below is then the single administrative entry point.
+
 resource "oci_core_network_security_group_security_rule" "ingress_ssh" {
   network_security_group_id = oci_core_network_security_group.k3s.id
   direction                 = "INGRESS"
   protocol                  = "6" # TCP
   source                    = var.admin_cidr
   source_type               = "CIDR_BLOCK"
-  description               = "SSH"
+  description               = "SSH, operator address only. Also the transport for the kube API tunnel."
 
   tcp_options {
     destination_port_range {
@@ -114,29 +122,23 @@ resource "oci_core_network_security_group_security_rule" "ingress_ssh" {
   }
 }
 
-resource "oci_core_network_security_group_security_rule" "ingress_kube_api" {
-  network_security_group_id = oci_core_network_security_group.k3s.id
-  direction                 = "INGRESS"
-  protocol                  = "6"
-  source                    = var.admin_cidr
-  source_type               = "CIDR_BLOCK"
-  description               = "k3s API server for kubectl and helm from the Mac"
-
-  tcp_options {
-    destination_port_range {
-      min = 6443
-      max = 6443
-    }
-  }
-}
+# --- Public ingress: the web ports, and only the web ports -------------------
+#
+# 80 and 443 are the one deliberately-public surface. They read from
+# public_ingress_cidr rather than admin_cidr so the two can never move
+# together: tightening SSH cannot take the public API offline, and opening the
+# web ports cannot widen administrative access. From P3 the eval gate is called
+# by GitHub Actions runners, whose egress addresses cannot be usefully
+# allowlisted, so these stay open to the internet by design rather than by
+# default.
 
 resource "oci_core_network_security_group_security_rule" "ingress_http" {
   network_security_group_id = oci_core_network_security_group.k3s.id
   direction                 = "INGRESS"
   protocol                  = "6"
-  source                    = "0.0.0.0/0"
+  source                    = var.public_ingress_cidr
   source_type               = "CIDR_BLOCK"
-  description               = "HTTP to the traefik ingress"
+  description               = "HTTP to the traefik ingress. Public by design."
 
   tcp_options {
     destination_port_range {
@@ -150,9 +152,9 @@ resource "oci_core_network_security_group_security_rule" "ingress_https" {
   network_security_group_id = oci_core_network_security_group.k3s.id
   direction                 = "INGRESS"
   protocol                  = "6"
-  source                    = "0.0.0.0/0"
+  source                    = var.public_ingress_cidr
   source_type               = "CIDR_BLOCK"
-  description               = "HTTPS to the traefik ingress"
+  description               = "HTTPS to the traefik ingress. Public by design."
 
   tcp_options {
     destination_port_range {
@@ -208,6 +210,9 @@ resource "oci_core_instance" "k3s" {
     ssh_authorized_keys = file(pathexpand(var.ssh_public_key_path))
     user_data = base64encode(templatefile("${path.module}/cloud-init/k3s.yaml.tftpl", {
       k3s_version = var.k3s_version
+      # Rendered here rather than in the template so the shell sees either a
+      # well-formed flag list or nothing at all, never an empty --tls-san.
+      tls_san_flags = join(" ", [for san in var.extra_tls_sans : "--tls-san ${san}"])
     }))
   }
 
@@ -239,9 +244,22 @@ resource "oci_core_instance" "k3s" {
       error_message = "No Canonical Ubuntu 24.04 aarch64 image found for VM.Standard.A1.Flex in ${var.region}."
     }
 
-    # A new Canonical image release must never destroy and recreate an instance
-    # that took days of capacity retries to obtain.
-    ignore_changes = [source_details[0].source_id]
+    ignore_changes = [
+      # A new Canonical image release must never destroy and recreate an
+      # instance that took days of capacity retries to obtain.
+      source_details[0].source_id,
+
+      # user_data executes once, at first boot. A running node can never be
+      # affected by editing it, so a diff here has no upside and one very large
+      # downside: on this shape, replacing the instance means re-entering the
+      # capacity lottery with no guarantee of getting another. Fixes to the
+      # bootstrap are applied to the live node directly and land in the
+      # template for the next build.
+      #
+      # Scoped to this one map key on purpose. ssh_authorized_keys stays live,
+      # so rotating the SSH key is still a normal in-place metadata update.
+      metadata["user_data"],
+    ]
   }
 
   # Shorter than the 20 minute provider default. A launch that has not returned
