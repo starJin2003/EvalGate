@@ -23,6 +23,14 @@ GOLDEN_IDS_FILE = ARTIFACTS_DIR / "golden_ids.json"
 # artifact and the manifest sits beside it.
 DATASET_DIR = ARTIFACTS_DIR / "dataset"
 DATASET_MANIFEST_FILE = ARTIFACTS_DIR / "dataset_manifest.json"
+# The paid, non-regenerable half of P1.1: 1,900 questions and their teacher
+# answers, chunk ids but never chunk text. Committed, because losing the Postgres
+# volume otherwise costs $2.89 AND invalidates the hand review, since a re-run of
+# the Batch API returns different answers. See dataset/recovery.py.
+RECOVERY_FILE = ARTIFACTS_DIR / "recovery.jsonl"
+# Where `dataset restore` rebuilds the splits to prove the recovery artifact
+# works. Gitignored and disposable; it must never be the directory training reads.
+RESTORE_DIR = ARTIFACTS_DIR / "restore_check"
 GOLDEN_JSONL = ARTIFACTS_DIR / "golden_set.jsonl"
 # Hand-review artifacts. The manifest is written by `golden select` before any
 # review happens, so the sample is fixed in advance and cannot be reshaped after

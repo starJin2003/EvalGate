@@ -55,6 +55,7 @@ Fill this in as artifacts land. A new session should be able to read this sectio
 - `training/artifacts/golden_manifest.json` holds the 96-case hand-review sample, 6 per (category, repo) cell, seed `evalgate-golden-v1`, no shortfall cells. Rerunning `golden select` rewrites it byte-identically
 - `golden/review.py` and `golden/review_server.py` are the hand-review tool. `golden review` serves a localhost two-pane UI, one case per screen, citation markers linked to the chunks stored on the row; verdicts append to `golden_review.jsonl` and `golden summary` writes `golden_review_summary.json`. No model calls anywhere in it
 - **P1.2 training splits.** `training/artifacts/dataset/{train,valid,test}.jsonl` (1,478 / 140 / 140). Those three filenames are what `mlx_lm.lora --data <dir>` requires; `valid.jsonl` is not optional. mlx-lm chat format, teacher system prompt preserved, golden 96 excluded
+- **`training/artifacts/recovery.jsonl`** is the paid state: 1,900 rows, 2.0 MB, sha256 `8641b0f6…`. Rebuild it with `dataset recovery-export` (needs Postgres); prove it with `dataset restore` (needs no Postgres). **`dataset restore --target training/artifacts/dataset` reconstructs the training inputs from committed files alone, so P1.2 never needs the database**
 - **The splits are gitignored; `dataset_manifest.json` is the committed artifact.** 56 KB, and it carries per-split `question_id` lists plus a sha256 of each rendered file, so the split is reconstructible and a rebuild is provable. Rebuild with `dataset export` (needs Postgres), then `dataset verify` to confirm byte-identity against the manifest. Current digests: train `54b9e5c7…`, valid `c7b9458d…`, test `b5baa051…`
 - **Do not re-add the rendered splits to git.** 23 MB, ~95% duplicated chunk text, and committing rendered upstream docs is what tripped GitHub push protection on a Grafana placeholder token on 2026-08-02
 - `training/src/evalgate_training/dataset/build.py` builds them: 8% + 8% held out per (category, repo) cell, ordered by `sha256(DATASET_SPLIT_SEED | question_id)` with no RNG, so a rerun on the same population is byte-identical. `plan()` is pure and covered by `training/tests/test_dataset_split.py`
@@ -118,8 +119,7 @@ Anything waiting on a human goes here so a fresh session does not silently work 
 
 ## 6. Known issues and deferred items
 
-- **STANDING RISK, now the largest one in the project: every question and teacher answer exists only in the Postgres Docker volume.** Nothing in the repo replaces them. `questions.jsonl` was never written, and the committed artifacts cover only the golden 96 (`golden_set.jsonl`, `review_export.jsonl`). Losing the volume — `docker compose down -v`, a Docker Desktop reset, a disk failure — costs the **$2.75 of the $2.89 ledger that bought questions and teacher answers**, and re-running is a 24-hour Batch API round trip that would produce *different* answers, invalidating the hand review, the golden set, and every split digest. Gitignoring the rendered splits removed the accidental backup that used to mask this
-- **The smallest artifact that removes it** is one JSONL row per `question_id` carrying only what money bought and nothing that rebuilds for free: `question_id, category, repo, question, absent_symbol, split, retrieved` (chunk ids, not text) `, answer, refused, citations, valid, validation_errors`. About **2 MB for all 1,900 rows** — chunk *text* stays out, since `corpus fetch/parse` regenerates it free and `chunk_manifest.content_sha256` already proves a rebuild matches. That one file plus the corpus reconstructs the entire dataset offline. Verified clean: no teacher answer quotes the flagged placeholder, so this artifact would not trip secret scanning. **Not built yet — flagged deliberately, awaiting the go-ahead**
+- ~~STANDING RISK: questions and teacher answers exist only in the Postgres volume~~ **Closed 2026-08-02 by `training/artifacts/recovery.jsonl`.** 1,900 rows, 2.0 MB, committed: question, absent_symbol, split, retrieved chunk **ids**, answer, refused, citations, valid, validation_errors. No chunk text. Restore is proven, not asserted — `dataset restore` ran with Postgres stopped, re-parsed 6,178 chunks with 0 hash mismatches against `chunk_manifest.jsonl`, and rebuilt all three splits byte-identical to `dataset_manifest.json`. Six tests guard it in CI, including an 8-pattern secret sweep and the golden-96 join
 - **Open question carried into the P1.2 eval, from the hand review: fastapi took 3 of the 4 failures at 21/24.** Per-repo n is 24 (+/- ~13 points), so this is a direction to check, not a measured gap. Look for it in the P1.2 eval; do not act on it in the data
 - **Accepted risk carried into the P1.2 eval: comparison-avoidance bias.** The comparison category refuses 36.0% of the time and that mix was deliberately left as is (DECISIONS, 2026-08-02), so the trained model may decline comparisons it could answer. Measure it after training — if comparison refusals come out above the teacher's 36%, the mix is the first thing to change. All 5 comparison refusals in the sample were valid, so the teacher's own bias is toward under-refusing, not over-refusing
 - ~~OCI Pay As You Go may allocate only 2 OCPU and 12 GB~~ **Resolved 2026-08-02. 4 OCPU / 24 GB launched and is running.** No shrink needed, and the 2 OCPU contingency is off the table unless the instance is ever lost
@@ -137,24 +137,37 @@ Two independent threads.
 
 The command, once the length is agreed:
 
+**No Postgres needed.** The splits come from committed files:
+
 ```bash
 uv sync --group mlx
-docker compose -f docker-compose.dev.yml up -d        # splits are gitignored, so:
-uv run evalgate-training dataset export               # rebuild them
-uv run evalgate-training dataset verify               # prove they match the manifest
-docker compose -f docker-compose.dev.yml down         # then free the RAM
+uv run evalgate-training dataset restore --target training/artifacts/dataset
 
 uv run python -m mlx_lm lora --model mlx-community/Qwen3-1.7B-8bit \
   --train --data training/artifacts/dataset \
   --max-seq-length 6528 --grad-checkpoint --mask-prompt \
-  --batch-size 1 --num-layers 8 --adapter-path training/artifacts/adapters-v1
+  --batch-size 1 --grad-accumulation-steps 4 \
+  --num-layers 16 --learning-rate 5e-5 \
+  --iters 2956 --steps-per-eval 200 --val-batches 25 --save-every 200 \
+  --adapter-path training/artifacts/adapters-v1
 ```
 
-Three knobs are still unset and none has a defensible default yet:
+**Proposed schedule, awaiting sign-off.** 2,956 iters at batch 1 is exactly **2 epochs** over 1,478 examples: ~8.6 h of steps plus ~0.4 h of validation, so **~9 h per version and ~18 h for v1 and v2 together**. Sequence length 6528 and 8-bit + grad-checkpoint are already decided. The rest:
 
-- **`--max-seq-length`.** 6528 truncates nothing; 4096 would cut the answers off 220 rows. Awaiting sign-off, so nothing was written into `config.py`.
-- **Precision.** 8-bit at 10.86 GB is the recommendation over bf16 at 12.55 GB, purely for headroom under the 12.71 GB ceiling. BUILD_PLAN prefers bf16 and bf16 does now fit — this is a margin call, not a capability one.
-- **Steps and batch size.** At ~10.5 s/step with `batch-size 1`, one epoch over 1,478 examples is roughly **4.3 hours**, so two epochs is most of a day. Worth setting iters deliberately, and worth checking whether `batch-size 2` beats `batch-size 1` on throughput before committing to an overnight run.
+| Knob | Value | mlx-lm default? |
+|---|---|---|
+| `--iters` | 2956 (2 epochs) | no, default 1000 (a WikiSQL demo length) |
+| `--batch-size` | 1 | no, default 4 — measured 18.69 GB at seq 6528 |
+| `--grad-accumulation-steps` | 4 | no, default 1 |
+| `--num-layers` | 16 | **yes**, and it measures well here (10.98 GB) |
+| LoRA rank / scale | 8 / 20.0 | **yes** both |
+| `--learning-rate` | 5e-5 constant | no, default 1e-5; no schedule, for resume safety |
+| `--steps-per-eval` / `--val-batches` | 200 / 25 | **yes** both |
+| `--save-every` | 200 | no, default 100 |
+
+**Checkpoint before committing 18 hours:** v1's val loss at iter ~600 (~1.8 h) is the first real evidence on whether 2 epochs is right. The epoch count rests on general SFT practice for 1-10k-example sets, not on anything measured here.
+
+**If the run dies at hour 3.** `--save-every 200` writes both `adapters.safetensors` and numbered `0000600_adapters.safetensors` checkpoints. Resume with `--resume-adapter-file <newest numbered file> --iters <remaining>`. Be aware this is a **warm restart, not an exact continuation**: mlx-lm restores adapter weights only — Adam moments reset to zero, the data iterator reshuffles, and the iteration counter starts over. Constant LR is chosen precisely so the schedule is not also lost. mlx-lm never picks a best checkpoint for you, so select on val loss at the end.
 
 Then `mlx_lm.fuse`, P1.3 (GGUF + llama.cpp), and P1.4, which is already built against stubs and needs only the runner pointed at a real endpoint. Two questions from the hand review travel into the P1.2 eval and are recorded in section 6: whether fastapi underperforms, and whether comparison refusals exceed the teacher's 36%.
 
@@ -165,6 +178,8 @@ Nothing in P2's remainder blocks P1.2, and P1.2 blocks nothing in P2 except the 
 ## 8. Session log
 
 Newest first. Three to five lines each. What was attempted, what landed, what broke, what the next session needs to know.
+
+**2026-08-02 Recovery artifact built and proven; training schedule proposed.** `recovery.jsonl` is 1,900 rows and 2.0 MB — question, absent_symbol, split, retrieved chunk **ids**, answer, refused, citations, valid, validation_errors. All 1,900 rather than the 1,758 trainable: the 46 invalid rows are the evidence behind the 97.6% validity number and the 96 golden rows are the hand review's subject, and a backup that cannot reproduce the review has not backed up most of what P1.1 bought. **The restore is proven, not asserted.** With Postgres stopped, `dataset restore` re-parsed 6,178 corpus chunks, cross-checked every one against the committed `chunk_manifest.jsonl` (0 mismatches, 0 missing), and rebuilt all three splits **byte-identical** to `dataset_manifest.json`. That match is what turns "chunk text is free to regenerate" from a claim into a measurement. Side effect worth having: **P1.2 no longer needs Postgres at all**, since `dataset restore --target training/artifacts/dataset` reconstructs the training inputs from committed files. Both pre-commit checks came back clean — an 8-pattern secret sweep over every field of all 1,900 rows found zero matches (chunk ids are kept, chunk text never is, and no teacher answer quotes the placeholder), and the golden 96 are identifiable by `split`, match `golden_ids.json` exactly, and every hand-review verdict still joins. Six new tests guard all of it in CI, including the sweep, so the next corpus refresh that pulls in a placeholder credential fails a test instead of GitHub push protection. Suite is 178 passed, 0 skipped. **Schedule proposed and not started:** 2,956 iters = 2 epochs, batch 1 with 4-step accumulation, 16 layers at rank 8, 5e-5 constant, ~9 h per version and ~18 h for both. Two measurements settled open questions — batch 2 is disqualified because it needs 18.69 GB on a 6,528-token batch against a 12.71 GB ceiling, and layer count and rank turn out to be nearly free next to sequence length. v1 and v2 will hold optimizer steps identical so the refusal collapse is attributable to the mix; constant-size remixing was checked and is impossible, since all 1,758 valid rows are already allocated.
 
 **2026-08-02 P1.2 storage reworked after GitHub push protection blocked the commit.** Secret scanning flagged a Grafana Project Service Account Token in `dataset/train.jsonl`. It is a **documentation placeholder**: one string, `glsa_iNValId…inva_5b582697`, whose body spells "invalid" repeated and whose 8 trailing hex chars are Grafana's format checksum derived from that body, shipping in public upstream Grafana docs. The scanner matches format, not entropy, and was right to fire. Checked the pushed tree before treating it as containment: **zero hits in every committed artifact**, including `review_export.jsonl` and `chunk_manifest.jsonl` — the latter stores `content_sha256` and never `content`. So nothing leaked; `review_export.jsonl` simply never sampled one of the 9 corpus chunks that carry the string, which was luck. Three other placeholders sat in the same data and would have been next: AWS's own `AKIAIOSFODNN7EXAMPLE` and the jwt.io example token, three times. **The fix is structural, not a redaction.** `training/artifacts/dataset/` is now gitignored and `dataset_manifest.json` is the committed artifact: 56 KB carrying per-split `question_id` lists plus a sha256 of each rendered file, against 23 MB of rendered text that is ~95% duplicated chunk content and rebuilds free in 14.7 s. Redacting the one string was rejected because it leaves the mechanism intact for the next corpus refresh. That broke the disjointness guard, which CI cannot run against gitignored files — it moved onto the manifest's id lists and **lost its `skipif` entirely**, so it now always runs, checking golden-leak, pairwise disjointness, and count agreement from committed data alone. Byte-agreement is a separate claim and went to a new `dataset verify`. Suite is 172 passed, 0 skipped. **The real cost of this change is that it removed an accidental backup: questions and teacher answers now exist only in the Postgres volume, and that is logged in section 6 as the project's largest standing risk with the ~2 MB artifact that would close it.** Not built — awaiting the go-ahead. Also unresolved: the 3 affected training rows were left in place, since the string is a public placeholder that no teacher answer quotes.
 

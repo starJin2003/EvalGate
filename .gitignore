@@ -47,6 +47,9 @@ training/artifacts/review_batches/
 # NOTE: this does NOT back up the teacher answers, which cost $2.89 and live only
 # in Postgres. See PROGRESS section 6.
 training/artifacts/dataset/
+# Scratch output of `dataset restore`. Disposable by design: it exists only to be
+# digest-compared against the manifest and must never be what training reads.
+training/artifacts/restore_check/
 
 # Terraform (P2)
 # .terraform.lock.hcl IS committed on purpose: it is the provider version pin.

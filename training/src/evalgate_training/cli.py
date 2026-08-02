@@ -27,12 +27,14 @@ import argparse
 import json
 import sys
 import webbrowser
+from pathlib import Path
 
 from . import config, db, openai_batch
 from .budget import BudgetExceeded, Ledger
 from .corpus import embed, fetch, parse
 from .corpus.repos import REPOS
 from .dataset import build as dataset_build
+from .dataset import recovery as dataset_recovery
 from .golden import export as golden_export
 from .golden import review as golden_review
 from .golden import review_export as golden_review_export
@@ -314,6 +316,18 @@ def cmd_dataset_verify(_: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_dataset_recovery_export(_: argparse.Namespace) -> None:
+    _print(dataset_recovery.export_recovery())
+    print("\nProve it restores with:  evalgate-training dataset restore")
+
+
+def cmd_dataset_restore(args: argparse.Namespace) -> None:
+    result = dataset_recovery.restore(Path(args.target) if args.target else None)
+    print(dataset_recovery.format_restore(result))
+    if not result["ok"]:
+        sys.exit(1)
+
+
 def cmd_budget(_: argparse.Namespace) -> None:
     print(Ledger().summary())
 
@@ -430,6 +444,14 @@ def build_parser() -> argparse.ArgumentParser:
     d.add_parser(
         "verify", help="check the gitignored splits against the committed manifest"
     ).set_defaults(func=cmd_dataset_verify)
+    d.add_parser(
+        "recovery-export", help="write the paid state: questions + teacher answers (needs Postgres)"
+    ).set_defaults(func=cmd_dataset_recovery_export)
+    rs = d.add_parser(
+        "restore", help="rebuild splits from recovery.jsonl + corpus, no DB, and prove digests"
+    )
+    rs.add_argument("--target", help=f"output dir (default {config.RESTORE_DIR})")
+    rs.set_defaults(func=cmd_dataset_restore)
 
     sub.add_parser("budget", help="show cumulative spend").set_defaults(func=cmd_budget)
     return p

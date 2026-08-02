@@ -337,6 +337,23 @@ uv run evalgate-training dataset export   # rebuild (needs Postgres)
 uv run evalgate-training dataset verify   # prove it matches the committed manifest
 ```
 
+**The paid state is backed up, and the backup is tested.** `artifacts/recovery.jsonl`
+is 1,900 rows and 2.0 MB: every question and teacher answer, plus retrieved chunk
+**ids**, and no chunk text. That is the half of P1.1 that cost $2.89 and cannot be
+regenerated — a re-run of the Batch API returns *different* answers, which would
+invalidate the hand review along with the data. Everything else rebuilds for free.
+
+```bash
+uv run evalgate-training dataset recovery-export                       # needs Postgres
+uv run evalgate-training dataset restore                               # needs none
+uv run evalgate-training dataset restore --target artifacts/dataset    # ...and this is
+                                          # how P1.2 gets its inputs with the DB stopped
+```
+
+`restore` re-parses the corpus, cross-checks all 6,178 chunks against
+`chunk_manifest.jsonl`, and fails unless the rebuilt splits are byte-identical to
+`dataset_manifest.json`. An untested backup is a comment.
+
 Committing rendered training text also means committing upstream documentation
 verbatim, including whatever placeholder credentials it contains — a Grafana
 `glsa_` example token in Grafana's own docs tripped GitHub push protection once.
