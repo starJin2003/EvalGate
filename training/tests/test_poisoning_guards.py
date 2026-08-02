@@ -118,8 +118,12 @@ def test_k_unchanged_when_nothing_measured() -> None:
     assert config.decide_k(None)[0] == config.RETRIEVAL_K
 
 
-def test_raised_k_is_actually_larger() -> None:
-    assert config.RETRIEVAL_K_RAISED > config.RETRIEVAL_K
+def test_rule_is_idempotent_once_applied() -> None:
+    """The rule re-measures once, not forever. With k already at the raised value,
+    a still-low span must not demand another raise, or the pipeline would loop."""
+    assert config.RETRIEVAL_K_RAISED >= config.RETRIEVAL_K
+    if config.RETRIEVAL_K == config.RETRIEVAL_K_RAISED:
+        assert config.decide_k(24.0)[0] == config.RETRIEVAL_K
 
 
 @pytest.mark.parametrize("pct", [0.0, 49.9, 50.0, 50.1, 100.0])
@@ -127,3 +131,67 @@ def test_k_rule_is_total(pct: float) -> None:
     k, reason = config.decide_k(pct)
     assert k in (config.RETRIEVAL_K, config.RETRIEVAL_K_RAISED)
     assert reason
+
+
+# --- guard 1 refinement: grounded cross-project claims are not fabrication ------
+def test_claim_cited_to_a_chunk_that_mentions_the_absent_project_is_grounded() -> None:
+    """A Grafana chunk stating that Grafana Alerting is built on the Prometheus
+    model makes a citation to it a legitimate source for naming Prometheus.
+    Flagging this was a false positive found in the 20-item dry run."""
+    answer = "Grafana Alerting is built on the Prometheus alerting model [C8]."
+    result = v.validate(
+        answer,
+        False,
+        ["C8"],
+        "comparison",
+        chunk_repos=["grafana"],
+        question=Q,
+        label_mentions={"C8": {"grafana", "prometheus"}},
+    )
+    assert result.valid, result.errors
+
+
+def test_claim_cited_to_a_chunk_that_does_not_mention_it_is_still_fabrication() -> None:
+    answer = "Prometheus evaluates alerting rules in the server itself [C1]."
+    result = v.validate(
+        answer,
+        False,
+        ["C1"],
+        "comparison",
+        chunk_repos=["grafana"],
+        question=Q,
+        label_mentions={"C1": {"grafana"}},
+    )
+    assert not result.valid
+    assert "fabricated_absent_side:prometheus" in result.errors
+
+
+def test_dependency_projects_named_in_the_question_are_not_absent_sides() -> None:
+    """FastAPI's docs discuss Pydantic throughout. A cited FastAPI chunk that names
+    Pydantic grounds the claim. Also a dry-run false positive."""
+    answer = "FastAPI uses Pydantic to serialize the response to JSON [C3]."
+    result = v.validate(
+        answer,
+        False,
+        ["C3"],
+        "comparison",
+        chunk_repos=["fastapi"],
+        question="Difference between a Pydantic response model and JWT auth in FastAPI?",
+        label_mentions={"C3": {"fastapi", "pydantic"}},
+    )
+    assert result.valid, result.errors
+
+
+def test_uncited_claim_about_an_absent_project_is_fabrication() -> None:
+    answer = "Grafana does this [C1]. Prometheus stores samples in a TSDB."
+    result = v.validate(
+        answer,
+        False,
+        ["C1"],
+        "comparison",
+        chunk_repos=["grafana"],
+        question=Q,
+        label_mentions={"C1": {"grafana"}},
+    )
+    assert not result.valid
+    assert any(e.startswith("fabricated_absent_side") for e in result.errors)

@@ -1,0 +1,345 @@
+[
+  {
+    "question_id": "00095f9fd4f4c8b5",
+    "category": "factual",
+    "question": "What query languages should you select based on your query syntax when troubleshooting CloudWatch Logs query errors in Grafana?",
+    "answer": "Select Logs Insights QL when your query uses the AWS native, SQL\u2011like CloudWatch Logs syntax with commands like fields, filter, stats, and sort [C4]. Select OpenSearch SQL when your query uses OpenSearch\u2019s SQL\u2011like syntax [C4]. Select OpenSearch PPL when your query uses the pipe\u2011based OpenSearch PPL syntax (pipe syntax similar to Splunk/search DSL) [C4].",
+    "refused": false,
+    "valid": true,
+    "errors": [],
+    "citations": [
+      "6c4942fc648a8353"
+    ],
+    "in": 2783,
+    "out": 692
+  },
+  {
+    "question_id": "000f83cdf2eb2a42",
+    "category": "adversarial",
+    "question": "Can grafana.provision.updateDashboardUIDs(uidList) be used to bulk update dashboard UIDs during provisioning?",
+    "answer": "I refuse because the provided documentation excerpts do not mention any function named grafana.provision.updateDashboardUIDs(uidList). [C3][C1]\nThe excerpts state that when a dashboard JSON contains a uid, Grafana updates or creates the dashboard with that uid at startup and provisioning can overwrite existing dashboards with the same uid. [C1][C3][C5]\nThe excerpts also document provisioning behaviors such as detecting filesystem updates, allowUiUpdates, disableDeletion, and guidance to provision data sources and keep consistent uids, but they do not describe any bulk-UID-update API or function. [C3][C4][C2]",
+    "refused": true,
+    "valid": true,
+    "errors": [],
+    "citations": [
+      "1fc0ec1f89778ebe",
+      "add28771a3ca78ec",
+      "21dae709362cf0cb",
+      "9b9806d407f780de",
+      "02603ccdce6d7cca"
+    ],
+    "in": 4031,
+    "out": 1519
+  },
+  {
+    "question_id": "00bfa0f9f01500b3",
+    "category": "howto",
+    "question": "How can I retrieve all alert rules using the Grafana Alerting Provisioning HTTP API?",
+    "answer": "Send a GET request to /api/v1/provisioning/alert-rules to retrieve all alert rules. [C1][C5][C2] The endpoint returns a 200 response with a ProvisionedAlertRules schema when successful. [C1] Note: this API is deprecated and will be removed in a future release; use the Grafana App Platform alerting APIs instead. [C1]",
+    "refused": false,
+    "valid": false,
+    "errors": [
+      "uncited_sentence:1"
+    ],
+    "citations": [
+      "07e43212dbe8a4f0",
+      "2fd9de517934f28c",
+      "dba1b91aa5275615"
+    ],
+    "in": 4355,
+    "out": 567
+  },
+  {
+    "question_id": "00ddea7f54120713",
+    "category": "comparison",
+    "question": "What are the main differences between using a Pydantic model as a response model in FastAPI's OpenAPI schema and using JWT tokens for user authentication and authorization in FastAPI?",
+    "answer": "Using a Pydantic model as a response model makes FastAPI generate JSON Schema from that model and include it in the OpenAPI schema, and FastAPI uses Pydantic to serialize the response to JSON (with improved performance by using Rust-side serialization) [C3][C5][C8]. Additional response entries can accept a 'model' value that FastAPI converts to JSON Schema and places under responses->content->application/json->schema as a $ref to components/schemas [C3]. JWT tokens are a security mechanism used with OAuth2/Bearer for authentication and authorization, and FastAPI supports setting up OAuth2/JWT-based security using its tools and the OpenAPI security schemes like http bearer and oauth2 [C7][C4]. FastAPI lets you integrate libraries like PyJWT and use dependency injection to provide the current user to path operations with any model or type, giving flexibility for security-related data handling [C7][C6].",
+    "refused": false,
+    "valid": true,
+    "errors": [],
+    "citations": [
+      "5f1c6b9b9b917f39",
+      "49d3dbc492da82b6",
+      "d78d156a756ca4d3",
+      "d4e024031353737b",
+      "c96de18560c2e6b7",
+      "3fdb343c107df7ee"
+    ],
+    "in": 3337,
+    "out": 1583
+  },
+  {
+    "question_id": "012dc81f38f086be",
+    "category": "adversarial",
+    "question": "Does FastAPI provide a `GrafanaOAuth` class to handle OAuth2 security scopes in route decorators?",
+    "answer": "The provided excerpts do not mention any GrafanaOAuth class or symbol in the FastAPI documentation supplied here [they list available security utilities but do not include such a class]. [C5]\nThe excerpts instead describe using Security(), OAuth2PasswordBearer, and SecurityScopes to declare OAuth2 scopes and security dependencies in FastAPI. [C4][C6][C8][C5]",
+    "refused": true,
+    "valid": true,
+    "errors": [],
+    "citations": [
+      "1d09ec61d513d38b",
+      "9dcd280e59049c9a",
+      "ba9486a01932113d",
+      "420aab994b598dfa"
+    ],
+    "in": 2692,
+    "out": 1078
+  },
+  {
+    "question_id": "015d0a1b81577350",
+    "category": "factual",
+    "question": "According to the OpenMetrics standard, why are there no opaque binary types like sketches or t-digests included in the exposition format?",
+    "answer": "OpenMetrics omits opaque binary types so that an exposition remains a usable, self-contained set of samples that imposes minimal burden on monitoring systems [C1]. Opaque types like sketches or t\u2011digests are excluded because they could not be expressed as a mix of gauges and counters and would require custom parsing and handling [C1].",
+    "refused": false,
+    "valid": true,
+    "errors": [],
+    "citations": [
+      "0a77e86680b6516c"
+    ],
+    "in": 2230,
+    "out": 482
+  },
+  {
+    "question_id": "019f1697da9bf295",
+    "category": "howto",
+    "question": "How do I prevent injection attacks by validating the Accept header in my Prometheus scrape targets?",
+    "answer": "I cannot provide concrete validation steps because the provided excerpts only state that targets MUST validate the Accept header to prevent potential injection attacks rather than giving implementation guidance [C1]. The excerpts also require validating the escaping scheme parameter and properly sanitizing Content-Type headers to avoid MIME type confusion [C1][C7]. They describe the Accept header format and the negotiation/selection process Prometheus uses when scraping metrics [C4][C3][C2]. Because no implementation details or examples for Accept-header validation are present in these excerpts, I must refuse to give specific validation steps; the excerpts instead state the requirement and list related considerations [C1][C4][C3][C7].",
+    "refused": true,
+    "valid": true,
+    "errors": [
+      "refused_present"
+    ],
+    "citations": [
+      "040a99f3feb8c50e",
+      "024cde6d048ba028",
+      "21ea0c9e5f1ebe7c",
+      "8bd18492a373480e",
+      "a9aec11d7fc654d5"
+    ],
+    "in": 1967,
+    "out": 2483
+  },
+  {
+    "question_id": "01b9906b6f1da24c",
+    "category": "adversarial",
+    "question": "Is there a Prometheus method called EnableSecureScraping that automatically configures HTTPS endpoints for metric scraping?",
+    "answer": "Refused: the provided excerpts do not mention any method named EnableSecureScraping [C2][C5][C7]. The excerpts instead describe configuring TLS and basic authentication for Prometheus HTTP endpoints and TLS options for connections from and to Prometheus via configuration files and flags [C2][C5][C7]. They also cover other scrape-related configuration such as enabling native histograms, scrape content negotiation, and exporter scheduling and scrape timeouts [C1][C4][C6].",
+    "refused": true,
+    "valid": true,
+    "errors": [],
+    "citations": [
+      "2221ea3bae163be9",
+      "4b886cef6fda699b",
+      "024cde6d048ba028",
+      "d2202bc056cb197c",
+      "a7e2587ac1cb670f",
+      "0977f389178dac6b"
+    ],
+    "in": 1970,
+    "out": 1617
+  },
+  {
+    "question_id": "01fada8fa435935b",
+    "category": "factual",
+    "question": "In the combined CompositeValue for histograms, which fields come immediately after 'count' and 'sum'?",
+    "answer": "The native fields \u2014 schema through positive_buckets \u2014 appear immediately after count and sum in a combined CompositeValue.[C4][C1]",
+    "refused": false,
+    "valid": true,
+    "errors": [],
+    "citations": [
+      "677dc0d3396c8337",
+      "076a2b862f051a55"
+    ],
+    "in": 5106,
+    "out": 445
+  },
+  {
+    "question_id": "02c846d53fb64229",
+    "category": "adversarial",
+    "question": "How do I use the FastAPI middleware class 'ProcessTimeInterceptor' to measure request duration?",
+    "answer": "I can't provide instructions for the middleware class 'ProcessTimeInterceptor' because that class does not appear in the provided documentation excerpts.  The excerpts do show how to create middleware with @app.middleware(\"http\") and call_next, and include an example that adds an X-Process-Time header using time.perf_counter to measure request duration [C6][C1].  They also document using app.add_middleware() for ASGI middleware classes and describe general middleware behavior and lifecycle [C5][C2].",
+    "refused": true,
+    "valid": true,
+    "errors": [],
+    "citations": [
+      "00ba305c4e723b70",
+      "2e6c74e0858629cf",
+      "73dec7538f1064ec",
+      "f5e63212f7caa71e"
+    ],
+    "in": 2733,
+    "out": 1421
+  },
+  {
+    "question_id": "041e1371fa742e1a",
+    "category": "adversarial",
+    "question": "Is there support for a `MetricExporterV2` class in Prometheus that exports metrics in a new format?",
+    "answer": "The provided excerpts describe exporters and exposition formats (exporters run alongside applications and expose or convert metrics, and Prometheus supports text and OpenMetrics exposition formats), but they do not mention any class or API named MetricExporterV2 in the supplied documentation excerpts [C2][C5][C6][C7][C4][C8].",
+    "refused": true,
+    "valid": true,
+    "errors": [],
+    "citations": [
+      "325e7dd65182c002",
+      "e5445b52d4bbb892",
+      "c120ce7394ee5c04",
+      "493b1ee21e1ee2e2",
+      "8e231f88983ab330",
+      "ddf69e66557b3836"
+    ],
+    "in": 2027,
+    "out": 1586
+  },
+  {
+    "question_id": "04ac6d7a300e22ca",
+    "category": "comparison",
+    "question": "How does license validation differ when using Grafana Enterprise with 'license_validation_type' set to 'aws' compared to the default validation method?",
+    "answer": "When license_validation_type is set to \"aws\", Grafana validates its license status with Amazon Web Services (AWS) instead of with Grafana Labs [C1]. The default (empty) setting causes Grafana Enterprise to validate using a license issued by Grafana Labs [C1]. This \"aws\" setting should only be used if you purchased an Enterprise license from AWS Marketplace [C1].",
+    "refused": false,
+    "valid": true,
+    "errors": [],
+    "citations": [
+      "1ef8ad6ebe5c4784"
+    ],
+    "in": 2507,
+    "out": 621
+  },
+  {
+    "question_id": "057eac38af121bf0",
+    "category": "comparison",
+    "question": "When would you choose to generate synthetic annotations using the TestData query editor versus fetching real annotations from an external data source in Grafana?",
+    "answer": "For prototyping dashboards, reproducing bugs, testing visualizations and edge cases, and simulating streaming, choose TestData to generate synthetic annotations because it generates simulated data for panels and its scenarios are intended for those uses [C1][C2].\nAlso use TestData when you don\u2019t want or don\u2019t have an external connection because TestData requires no external connection or authentication [C7].\nIf you need real annotations from an external system for live or authoritative event markers, fetch annotations via annotation queries from that external data source because annotation queries can use any data source to return events visualized as event markers [C5].\nNote that although TestData supports Grafana Alerting for prototyping alert rules, some TestData scenarios that run entirely in the browser can\u2019t be used with Grafana Alerting or in server-side evaluation contexts, so prefer external sources when you require server-side evaluation for alerts [C3][C2].",
+    "refused": false,
+    "valid": true,
+    "errors": [],
+    "citations": [
+      "98756b854fb8f067",
+      "bf1ab39bb91061ef",
+      "b878b7ce3a9761f5",
+      "bcb723738c379dfe",
+      "75a9f8baba963609"
+    ],
+    "in": 1697,
+    "out": 1066
+  },
+  {
+    "question_id": "0690348b41de31d6",
+    "category": "comparison",
+    "question": "What are the trade-offs between writing asynchronous test functions using pytest.mark.anyio versus writing synchronous test cases in FastAPI testing?",
+    "answer": "Async tests require marking the test with pytest.mark.anyio and making the test function async def to be run asynchronously [C1][C2].\nThey let you create an AsyncClient and send async requests and await other async functions, which is useful when you need to test async database interactions or other async code [C2][C3][C6].\nThe AsyncClient is based on HTTPX and does not trigger application lifespan events by itself, so you must use LifespanManager if you need those events in async tests [C2][C5].\nSynchronous tests can use TestClient, which does internal magic to call the async FastAPI app from normal def tests and is simpler to use in that style, but that TestClient cannot be used inside async test functions [C5].\nWhen writing async tests you must also be careful to instantiate objects that require an event loop inside async functions to avoid runtime errors like \"Task attached to a different loop\" [C6].",
+    "refused": false,
+    "valid": true,
+    "errors": [],
+    "citations": [
+      "184f32eb7a1a0a1d",
+      "7dcaf6b67834bb6d",
+      "cf2e205ba6774ed3",
+      "dff25577dad973d5",
+      "f6b7bc8066fa4584"
+    ],
+    "in": 2521,
+    "out": 950
+  },
+  {
+    "question_id": "06d26b0d94d10875",
+    "category": "comparison",
+    "question": "What are the differences between Grafana-managed alerting (GMA) and data source-managed alerting (DMA) in Grafana, and when should one choose GMA over DMA?",
+    "answer": "Grafana-managed alerting (GMA) is Grafana's built-in alerting and Alertmanager workflow, while data source-managed alerting (DMA) refers to alerts managed by external data sources such as Prometheus or Loki [C1][C3]. New Grafana and Grafana Cloud stacks use GMA by default, and pre-provisioned Loki and Prometheus DMA have been deprecated and cannot be created in new stacks [C3][C4]. You can still use DMA if you add your own Mimir, Loki, or Alertmanager data sources, and existing DMA stacks are not affected [C3][C4]. Cloud users can import DMA rules into GMA with the import tool [C3]. Choose GMA when you are on new Grafana or Grafana Cloud stacks or when you want to rely on the built-in Grafana Alertmanager (which only handles Grafana-managed alerts) and the unified Grafana Alerting UI [C1][C8].",
+    "refused": false,
+    "valid": true,
+    "errors": [],
+    "citations": [
+      "30a9f15df4bfc250",
+      "6ad735d90c6d6d40",
+      "6c01344b701da3d5",
+      "9d86436f25d7c7cb"
+    ],
+    "in": 2533,
+    "out": 1965
+  },
+  {
+    "question_id": "07d0ef410272bed7",
+    "category": "comparison",
+    "question": "What trade-offs exist between using a single OpenAPI schema versus separate schemas for input and output in FastAPI applications?",
+    "answer": "Pydantic v2 makes the generated OpenAPI more exact and in some cases FastAPI will include two JSON Schemas in OpenAPI for the same Pydantic model, one for input and one for output, depending on default values [C2]. If you prefer to keep a single schema for both input and output (for example to avoid updating existing autogenerated client code/SDKs), FastAPI allows disabling separate schemas with separate_input_output_schemas=False [C1]. Support for separate_input_output_schemas was added in FastAPI 0.102.0 [C1].",
+    "refused": false,
+    "valid": true,
+    "errors": [],
+    "citations": [
+      "87ea59ac821d1116",
+      "19d5f1586a4b5529"
+    ],
+    "in": 2381,
+    "out": 854
+  },
+  {
+    "question_id": "07db1505a793e90f",
+    "category": "comparison",
+    "question": "What are the trade-offs between using pre-provisioned data source-managed alerts in Grafana and user-added data sources for alerting, considering the context of Pydantic's strict validation errors like `complex_str_parsing`?",
+    "answer": "I must refuse because the provided excerpts contain no information about Pydantic or the 'complex_str_parsing' validation error, so I cannot assess trade-offs involving it.\n\nWhat the excerpts do cover: Pre-provisioned Loki and Prometheus data source-managed alerts have been deprecated and cannot be created in new Grafana stacks, while existing stacks are unaffected and you can add your own Mimir, Loki, or Alertmanager data sources to continue using data source-managed alerts [C5].\n\nThe documentation's comparison shows data source-managed alerts only support Mimir and Loki and perform alert rule evaluation in the data source (allowing horizontal scaling), whereas Grafana-managed alerts support many more features and evaluate in Grafana [C7].",
+    "refused": true,
+    "valid": true,
+    "errors": [
+      "refused_present"
+    ],
+    "citations": [
+      "6c01344b701da3d5",
+      "249b0a800eb19da4"
+    ],
+    "in": 3073,
+    "out": 1733
+  },
+  {
+    "question_id": "0a5480191cc0c357",
+    "category": "comparison",
+    "question": "How does Grafana's use of KV methods for sorting and filtering key-value pairs aid in alert notification templating compared to Prometheus's emphasis on alert simplicity and focusing on end-user symptoms?",
+    "answer": "I refuse because the provided excerpts do not mention \"KV methods for sorting and filtering key-value pairs\", nor do they describe Prometheus's emphasis on alert simplicity and focusing on end-user symptoms. The excerpts do describe Grafana's templating features such as annotations, labels, and notification templates [C2][C5], and state that Grafana Alerting is built on the Prometheus alerting model [C8].",
+    "refused": true,
+    "valid": true,
+    "errors": [
+      "refused_present"
+    ],
+    "citations": [
+      "2ba2117e406365ea",
+      "e596253247b61afe",
+      "f67d1961f3c96c26"
+    ],
+    "in": 2301,
+    "out": 1528
+  },
+  {
+    "question_id": "0ad81663f9659314",
+    "category": "comparison",
+    "question": "What are the differences between using model_config with ConfigDict options like title or json_schema_extra for customizing JSON schema compared to using alias generators for field name customization?",
+    "answer": "Model-level ConfigDict options such as title and json_schema_extra are used to customize the generated JSON Schema metadata and structure at the model level, and these options are listed as relevant model-level config settings for JSON Schema generation [C1][C3][C6]. Field- and model-level title generators (field_title_generator and model_title_generator) can programmatically set titles used in the schema [C1][C8]. Alias generators (alias_generator or AliasGenerator) produce aliases for fields that affect validation and serialization names rather than schema metadata, and Pydantic documents alias generators as a way to generate aliases for all fields in a model [C2]. Because the schema is generated by default using aliases as keys, aliases produced by an alias generator can change the keys used in the generated schema unless you request property names instead when producing the schema [C4]. AliasGenerator can provide separate validation and serialization aliases so loading and saving names can differ [C5]. Finally, ConfigDict controls whether aliases are used for validation or serialization (validate_by_alias/validate_by_name and serialize_by_alias), so alias behavior in practice depends on those settings [C7].",
+    "refused": false,
+    "valid": true,
+    "errors": [],
+    "citations": [
+      "1bd40fb7c06da83f",
+      "a03cccb813a6316a",
+      "53214162768f612c",
+      "6a054119783de337",
+      "2e391f048b122c3f",
+      "4beff4eebbb37ec4",
+      "2c6247e05f4311b8",
+      "719a66cf87ab0110"
+    ],
+    "in": 3023,
+    "out": 1115
+  },
+  {
+    "question_id": "0b60f1082cd6a6c7",
+    "category": "comparison",
+    "question": "What are the differences in load distribution support in Grafana's alerting high availability mode versus legacy dashboard alerts?",
+    "answer": "Grafana Alerting high availability evaluates all alert rules on every instance by default, deduplicates notifications so they are sent only once per alert, and does not support load distribution between servers [C2][C1]. Legacy dashboard alerts use a limited high-availability model that also executes all alerts on every server and deduplicates notifications, and likewise does not support load distribution between servers [C1].",
+    "refused": false,
+    "valid": true,
+    "errors": [],
+    "citations": [
+      "06595fd101a3c653",
+      "36cf9b55ddbb4a68"
+    ],
+    "in": 3204,
+    "out": 882
+  }
+]

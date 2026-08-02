@@ -59,3 +59,27 @@ def test_code_blocks_do_not_count_as_uncited_sentences() -> None:
 def test_cited_labels_are_deduped_and_sorted() -> None:
     result = v.validate("A [C2][C1]. B [C1].", False, LABELS, "factual")
     assert result.cited == ["C1", "C2"]
+
+
+def test_markers_after_the_full_stop_still_count_as_citing_that_sentence() -> None:
+    """Found by reading dry-run prose: gpt-5-mini sometimes writes
+    "…all alert rules. [C1][C5]" and the naive split orphaned the markers onto
+    the next sentence, marking a properly cited sentence as uncited."""
+    answer = (
+        "Send a GET request to /api/v1/provisioning/alert-rules. [C1][C3] "
+        "The endpoint returns a ProvisionedAlertRules schema. [C1]"
+    )
+    result = v.validate(answer, False, LABELS, "howto")
+    assert result.valid, result.errors
+
+
+def test_markers_before_the_full_stop_still_work() -> None:
+    answer = "Send a GET request [C1]. It returns a schema [C2]."
+    assert v.validate(answer, False, LABELS, "howto").valid
+
+
+def test_a_genuinely_uncited_sentence_is_still_caught_after_normalisation() -> None:
+    answer = "Send a GET request. [C1] This endpoint is generally the best approach here."
+    result = v.validate(answer, False, LABELS, "howto")
+    assert not result.valid
+    assert any(e.startswith("uncited_sentence") for e in result.errors)

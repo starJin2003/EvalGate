@@ -39,7 +39,7 @@ brew install uv node kubectl helm terraform k6 jq libpq llama.cpp
 brew install --cask orbstack
 ```
 
-Notes. uv manages Python versions and virtualenvs and the target is Python 3.12. OrbStack provides docker and docker compose, is free for personal use, and is light on Apple Silicon. Docker Desktop is a fine substitute. llama.cpp from brew serves quantized GGUF models locally during P1. Fine tuning runs on the separate RTX 5080 Windows machine and only the adapter travels back through Hugging Face, so the arm64 dev and prod path is untouched.
+Notes. uv manages Python versions and virtualenvs and the target is Python 3.12. OrbStack provides docker and docker compose, is free for personal use, and is light on Apple Silicon. Docker Desktop is a fine substitute. llama.cpp from brew serves quantized GGUF models locally during P1. Fine tuning runs on this same M1 Pro through MLX, so the whole project is arm64 Apple Silicon in dev and arm64 Ampere in prod, with no second machine and no CUDA anywhere.
 
 ## 4. Claude Code setup
 
@@ -66,7 +66,7 @@ Conventions.
 | 2 | Hugging Face | P1 | Account plus a read and write token. Base model download and adapter upload | Free |
 | 3 | OpenAI Platform | P1 | API key on the account holding roughly 14 dollars of credit. This is platform.openai.com credit, separate from ChatGPT Codex credits, which cannot be called from scripts. Keep the 20 dollar monthly cap | Existing credit |
 | 4 | Google AI Studio | P1 fallback | Gemini API key as a fallback provider only. Read the live per project limits in the AI Studio dashboard rather than trusting published numbers | Free |
-| 5 | Kaggle or Colab | P1 fallback | Only if the local RTX 5080 path fails. Kaggle is a fixed 30 GPU hours per week on T4 or P100 | Free |
+| 5 | Kaggle or Colab | P1 fallback | Capacity fallback only, if M1 memory would force truncating training sequences and compromise the data. Kaggle is a fixed 30 GPU hours per week on T4 or P100 | Free |
 | 6 | Oracle Cloud OCI | P2 | Sign up, then upgrade to Pay As You Go. A card is required and the roughly 100 dollar temporary hold refunds. After upgrade verify the Ampere A1 free allowance actually shows 4 OCPU 24 GB, set a budget alert at 1 dollar, then create the instance | 0 target |
 | 7 | Databricks Free Edition | P5 | Sign up with email OTP or Google. Do the LinkedIn verification to raise limits. Serverless only and non commercial only | Free |
 | 8 | Cloudflare | P6 | Account for Workers and R2 | Free |
@@ -84,7 +84,7 @@ evalgate/
   packages/evalcore/   eval harness (runner, scorers, judge client, diff)
   packages/sdk/        pip installable trace client
   workers/             Kafka consumer, promotion worker, judge rescore worker
-  training/            data prep, Kaggle notebooks, GGUF convert and quantize scripts
+  training/            data prep, MLX LoRA scripts, GGUF convert and quantize scripts
   infra/terraform/     OCI provisioning
   infra/k8s/           manifests and helm values
   analytics/           export DAG helpers, Spark jobs, dbt project
@@ -128,12 +128,16 @@ P1.1 Data (1 day)
 - Golden eval set of 80 to 100 cases held out and hand reviewed by Jinwoo. Never used for training. Unreviewed teacher output must not become eval ground truth.
 
 P1.2 Training (1 day)
-- training/ scripts and a notebook that runs on the RTX 5080 machine. PEFT and TRL LoRA, bf16, thinking mode disabled.
+- MLX on the M1 Pro. `mlx-lm` for LoRA, `mlx_lm.fuse` to merge the adapter, then the existing GGUF path. No second machine and no CUDA anywhere in the project.
+- Do not assume a 4-bit base. Qwen3 1.7B is roughly 3.4 GB in bf16, and the 4-bit guidance circulating in the MLX community targets 9B and larger. Try bf16 LoRA first, fall back to 8-bit, then 4-bit. Record which precision actually fit and the peak memory it used.
+- Measure the real token length distribution of the finished dataset and set max sequence length from it. Training samples run near 3000 tokens at k=8, so a guessed value either truncates context or wastes memory.
+- Stop the dev Docker stack before training. The corpus is not needed once retrieved contexts are baked into the dataset, and 16 GB is shared with macOS.
 - v1 trained on a balanced mix across all four categories.
 - v2 trained on a mix that raises practical question weight and cuts refusal examples. Expected outcome is a higher overall score with the refusal category collapsing. This is a real data mix experiment, not a fabricated regression, and the cause is documented.
 - Adapters pushed to Hugging Face.
 
 P1.3 Serving (0.5 day)
+- Unchanged by the MLX switch. MLX cannot run on OCI Ampere, so GGUF plus llama.cpp was already the serving path for both local and prod.
 - Merge LoRA, convert to GGUF, quantize Q4_K_M.
 - llama-server with an OpenAI compatible endpoint. Both versions servable so the harness can hit either.
 
@@ -144,7 +148,7 @@ P1.4 Harness (1.5 to 2 days)
 - apps/api v0. Register suite, trigger run, store results in Postgres, list runs, fetch a diff between two runs.
 - Dockerfiles, arm64.
 
-[YOU] Setup. Hugging Face account and token. OpenAI API key. PyTorch with CUDA 12.8 on the RTX 5080 box, since Blackwell needs sm_120 and PyTorch 2.7.0 or later shipped that natively in the cu128 wheels. Hand review the golden set. Kaggle only if the local GPU path fails.
+[YOU] Setup. Hugging Face account and token. OpenAI API key. Hand review the golden set. Before P1.2 training, stop the dev Docker stack with `docker compose -f docker-compose.dev.yml down` so the 16 GB is not shared with Postgres. Kaggle or Colab only as a capacity fallback, if M1 memory forces a sequence truncation that would compromise the training data.
 
 Exit. The harness detects the v1 to v2 regression, the diff report names the broken category and the specific cases, and the README quickstart reproduces the run on the Mac against a downloaded GGUF.
 
@@ -254,7 +258,7 @@ Live URL from P2 onward. Architecture diagram in the README from P1. DECISIONS.m
 - OCI. Always Free Ampere A1 was cut to 2 OCPU 12 GB effective June 15 2026 with no announcement. Human support agents state PAYG tenancies keep 4 OCPU 24 GB free, but official docs do not distinguish account types. Treat 4 24 as unconfirmed until verified in the console after upgrade. Set a 1 dollar budget alert immediately.
 - Apache Kafka. The 4.x line is KRaft only and ZooKeeper is removed. 4.2 went GA on 2026-02-17. Brokers require Java 17. A combined broker and controller node is the sanctioned small deployment shape.
 - Apache Airflow. 3.3.0 released 2026-07-06. Requires Python 3.10 plus and 3.12 is recommended.
-- GPU. Primary is a local RTX 5080 with 16 GB. Blackwell is compute capability sm_120 and needs CUDA 12.8. PyTorch 2.7.0 was the first stable release shipping native sm_120 support in cu128 wheels. Fallbacks are Kaggle at a fixed 30 GPU hours per week on T4 or P100, and Colab free at a dynamic 15 to 30 hours per week.
+- Training compute. MLX, Apple's array framework for Apple Silicon. Runs on every Apple Silicon generation from M1 onward and uses the unified memory shared with the OS, so there is no separate VRAM budget. `mlx-lm` covers LoRA and QLoRA plus `mlx_lm.fuse` for merging adapters. On a 16 GB machine the memory pressure comes from sequence length rather than model size: Qwen3 1.7B is roughly 3.4 GB in bf16, while attention and optimizer state over ~3000-token samples is what actually decides whether a run fits. MLX is Apple-only and cannot serve on OCI Ampere, which is why GGUF plus llama.cpp remains the serving path. Fallbacks are Kaggle at a fixed 30 GPU hours per week on T4 or P100, and Colab free at a dynamic 15 to 30 hours per week, wanted only if M1 memory would force truncating training sequences.
 - Gemini API free tier. Exists and needs no card, but published numbers disagree across sources and were cut sharply in December 2025. Pro moved behind billing and the free tier now covers Flash and Flash-Lite. Per model figures live in the AI Studio dashboard rather than static docs, and daily request caps bite long running jobs hardest. Treat it as a fallback provider, never as the plan. Free tier prompts and outputs may be used for training.
 - Cloudflare free tier. Workers at 100K requests per day. R2 at 10 GB storage, 1M class A and 10M class B operations per month, zero egress.
 - Claude Code. The VS Code extension bundles its own CLI, requires VS Code 1.98 or newer, and authenticates through the Claude account in a browser flow.
@@ -263,4 +267,6 @@ Live URL from P2 onward. Architecture diagram in the README from P1. DECISIONS.m
 
 1. Kafka memory budget and single versus dual instance. Decide after the P2 allowance verification.
 
-Closed 2026-07-31. Project name is EvalGate. Base model is Qwen3 1.7B Instruct. Task is grounded documentation QA over open source docs. Teacher and judge are both OpenAI with Gemini as fallback. Fine tuning runs on a local RTX 5080.
+Closed 2026-07-31. Project name is EvalGate. Base model is Qwen3 1.7B Instruct. Task is grounded documentation QA over open source docs. Teacher and judge are both OpenAI with Gemini as fallback.
+
+Closed 2026-08-01. Fine tuning runs on the M1 Pro through MLX. The RTX 5080 Windows machine is out of the plan entirely.

@@ -1,0 +1,124 @@
+name: eval-gate
+
+# The regression gate. Runs the suite on the PR head, compares against the
+# baseline promoted on main, comments the case-level diff, and fails the check
+# when a threshold is breached. Branch protection on `eval-gate` is what turns a
+# failure into a blocked merge; see BUILD_PLAN.md P3.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: eval-gate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  SUITE: artifacts/suite.json
+  BASELINE: artifacts/baseline_run.json
+  CANDIDATE: artifacts/candidate_run.json
+
+jobs:
+  gate:
+    name: eval-gate
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Install Python 3.12
+        run: uv python install
+
+      - name: Sync workspace
+        run: uv sync --locked
+
+      # The judge cache is keyed on case + output + judge version, so an
+      # unchanged case costs no quota on reruns. Restoring it across PRs is
+      # what keeps the gate affordable on a zero-dollar budget.
+      - name: Restore judge cache
+        uses: actions/cache@v4
+        with:
+          path: .cache/judge.sqlite
+          key: judge-${{ runner.os }}-${{ hashFiles(env.SUITE) }}
+          restore-keys: judge-${{ runner.os }}-
+
+      - name: Build suite from the golden set
+        run: |
+          uv run evalgate-eval build-suite \
+            --golden training/artifacts/golden_set.jsonl \
+            --out "$SUITE"
+
+      # P1.3 replaces this with a real llama-server endpoint. Until then the
+      # echo model exercises the whole path so the gate itself is proven.
+      - name: Run the candidate
+        run: |
+          uv run evalgate-eval run \
+            --suite "$SUITE" \
+            --out "$CANDIDATE" \
+            --run-id "pr-${{ github.event.pull_request.number || github.run_id }}" \
+            --model-ref "${{ github.event.pull_request.head.sha || github.sha }}" \
+            --judge --judge-cache .cache/judge.sqlite
+
+      - name: Fetch the baseline promoted on main
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: eval-baseline
+          path: artifacts
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ vars.EVAL_BASELINE_RUN_ID }}
+
+      - name: Gate
+        id: gate
+        run: |
+          set +e
+          uv run evalgate-eval gate \
+            --suite "$SUITE" \
+            --baseline "$BASELINE" \
+            --candidate "$CANDIDATE" \
+            --comment artifacts/comment.md \
+            --html artifacts/report.html \
+            --json artifacts/verdict.json
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: artifacts/
+
+      - name: Comment on the PR
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = 'artifacts/comment.md';
+            if (!fs.existsSync(path)) return;
+            const body = fs.readFileSync(path, 'utf8');
+            const marker = '<!-- eval-gate -->';
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const existing = await github.rest.issues.listComments({ owner, repo, issue_number });
+            const mine = existing.data.find(c => c.body.includes(marker));
+            const payload = `${marker}\n${body}`;
+            if (mine) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body: payload });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body: payload });
+            }
+
+      - name: Fail the check on a breach
+        if: steps.gate.outputs.exit_code != '0'
+        run: |
+          echo "::error::eval-gate blocked this merge; see the PR comment and the eval-report artifact"
+          exit 1

@@ -1,0 +1,63 @@
+{
+  "dry_run_items": 20,
+  "valid": 20,
+  "validation_errors": {
+    "refused_present": 3
+  },
+  "measured_prompt_tokens": 56471,
+  "measured_completion_tokens": 9089,
+  "mean_prompt_tokens": 2823.6,
+  "mean_completion_tokens": 454.4,
+  "per_category_means": {
+    "adversarial": {
+      "n": 5,
+      "in": 2690.6,
+      "out": 1444.2
+    },
+    "comparison": {
+      "n": 10,
+      "in": 2657.7,
+      "out": 1229.7
+    },
+    "factual": {
+      "n": 3,
+      "in": 3373.0,
+      "out": 539.7
+    },
+    "howto": {
+      "n": 2,
+      "in": 3161.0,
+      "out": 1525.0
+    }
+  },
+  "sample_composition": {
+    "adversarial": 5,
+    "comparison": 10,
+    "factual": 3,
+    "howto": 2
+  },
+  "guard_rates": {
+    "comparison_rows": 10,
+    "fabricated_absent_side": 0,
+    "fabricated_absent_side_pct": 0.0,
+    "adversarial_rows": 5,
+    "failed_to_refuse": 0,
+    "failed_to_refuse_pct": 0.0
+  },
+  "dry_run_usd": 0.0323,
+  "remaining_questions": 1880,
+  "remaining_by_category": {
+    "howto": 498,
+    "comparison": 390,
+    "factual": 597,
+    "adversarial": 395
+  },
+  "retrieval_k": 8,
+  "reasoning_effort": "default",
+  "projected_full_run_usd_batch": 2.8426,
+  "projected_total_usd": 1.7085,
+  "usd_ceiling": 5.0,
+  "model": "gpt-5-mini",
+  "pricing_checked": "2026-07-31",
+  "note": "restored from the default-effort A/B baseline; low-effort rows discarded"
+}

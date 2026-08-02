@@ -1,9 +1,18 @@
 [project]
 name = "evalgate-api"
-version = "0.0.1"
+version = "0.1.0"
 description = "EvalGate FastAPI service: suites, runs, diffs, traces, promotion."
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "evalcore",
+    "fastapi>=0.115",
+    "psycopg[binary]>=3.2",
+    "pydantic>=2.9",
+    "uvicorn>=0.32",
+]
+
+[tool.uv.sources]
+evalcore = { workspace = true }
 
 [build-system]
 requires = ["hatchling"]

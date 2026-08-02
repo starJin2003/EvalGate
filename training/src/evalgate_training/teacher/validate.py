@@ -57,8 +57,15 @@ class Validation:
     cited: list[str] = field(default_factory=list)
 
 
+# "…retrieve all alert rules. [C1][C5]" puts the markers after the full stop, so a
+# naive split orphans them onto the next sentence and the cited one reads as uncited.
+# Pull trailing markers back inside the sentence they belong to.
+TRAILING_MARKER_RE = re.compile(r"([.!?])(\s*)((?:\[C\d+\])+)")
+
+
 def sentences(answer: str) -> list[str]:
-    prose = CODE_BLOCK_RE.sub(" ", answer)
+    prose = TRAILING_MARKER_RE.sub(r"\3\1", answer)
+    prose = CODE_BLOCK_RE.sub(" ", prose)
     out: list[str] = []
     for line in prose.splitlines():
         stripped = line.strip()
@@ -76,18 +83,34 @@ def is_disclaimer(sentence: str) -> bool:
     return bool(DISCLAIMER_RE.search(sentence))
 
 
-def fabricated_sides(answer: str, absent_repos: set[str]) -> set[str]:
-    """Absent projects described in a sentence that is not a statement of absence.
+def fabricated_sides(
+    answer: str,
+    absent_repos: set[str],
+    label_mentions: dict[str, set[str]] | None = None,
+) -> set[str]:
+    """Absent projects asserted **without grounding**.
 
-    This is the mechanical form of "the teacher filled the missing side from
-    pretraining": the excerpts never mentioned the project, so any assertion
-    about it came from the model's own memory.
+    "Named in the question but missing from retrieval" is not sufficient: FastAPI's
+    docs discuss Pydantic constantly, and a Grafana chunk can state that Grafana
+    Alerting is built on the Prometheus model. Those claims are cited to real
+    retrieved text and are not fabrication.
+
+    A sentence is only fabrication when it names an absent project and *no chunk it
+    cites mentions that project*. That is the case where the assertion can only have
+    come from pretraining.
     """
+    mentions = label_mentions or {}
     found: set[str] = set()
     for sentence in sentences(answer):
         if TRIVIAL_RE.match(sentence) or is_disclaimer(sentence):
             continue
-        found |= repos_named(sentence) & absent_repos
+        named = repos_named(sentence) & absent_repos
+        if not named:
+            continue
+        grounded: set[str] = set()
+        for marker in MARKER_RE.findall(sentence):
+            grounded |= mentions.get(marker, set())
+        found |= named - grounded
     return found
 
 
@@ -99,6 +122,7 @@ def validate(
     *,
     chunk_repos: list[str] | None = None,
     question: str = "",
+    label_mentions: dict[str, set[str]] | None = None,
 ) -> Validation:
     errors: list[str] = []
     used = MARKER_RE.findall(answer)
@@ -136,7 +160,7 @@ def validate(
         present = set(chunk_repos)
         absent = repos_named(question) - present
         if absent and len(present) <= 1:
-            fabricated = fabricated_sides(answer, absent)
+            fabricated = fabricated_sides(answer, absent, label_mentions)
             if fabricated:
                 errors.append(f"fabricated_absent_side:{','.join(sorted(fabricated))}")
 

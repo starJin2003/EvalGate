@@ -4,7 +4,7 @@ Current state of EvalGate. Read this first in every session. Update it before en
 
 Three files, three jobs. BUILD_PLAN.md is the plan and rarely changes. DECISIONS.md is an append only log of rationale and measurements. This file is mutable current state and gets overwritten freely.
 
-Last updated 2026-07-31 by the P1.1 session.
+Last updated 2026-08-01.
 
 ---
 
@@ -18,16 +18,16 @@ Last updated 2026-07-31 by the P1.1 session.
 | P1.1 Data | In progress |
 | P1.2 Training | Not started |
 | P1.3 Serving | Not started |
-| P1.4 Harness | Not started |
+| P1.4 Harness | Built against stubs 2026-08-01; needs a real endpoint at P1.3 |
 | P2 Infra | Not started |
-| P3 Automation | Not started |
+| P3 Automation | Gate workflow and threshold logic scaffolded 2026-08-01 |
 | P4 Ingestion | Not started |
 | P5 Analytics | Not started |
 | P6 Optional | Not started |
 
 ## 2. Locked decisions
 
-Project name EvalGate. Base model Qwen3 1.7B Instruct with thinking mode off. Task is grounded documentation QA over open source docs. Corpus repos are FastAPI, Pydantic, Prometheus, and Grafana. Teacher is gpt-5-mini through the Batch API. Judge is a different and stronger model, chosen at P1.4. Fine tuning runs on a local RTX 5080 Windows machine and only the adapter travels back through Hugging Face. Everything else is arm64 on the M1 and on OCI Ampere.
+Project name EvalGate. Base model Qwen3 1.7B Instruct with thinking mode off. Task is grounded documentation QA over open source docs. Corpus repos are FastAPI, Pydantic, Prometheus, and Grafana. Teacher is gpt-5-mini through the Batch API. Judge is a different and stronger model, chosen at P1.4. Fine tuning runs on the M1 Pro through MLX as of 2026-08-01; the RTX 5080 Windows machine is out of the plan entirely. Everything is arm64 Apple Silicon in dev and arm64 Ampere in prod.
 
 Full rationale for each of these lives in DECISIONS.md. Do not relitigate them here.
 
@@ -48,13 +48,18 @@ Fill this in as artifacts land. A new session should be able to read this sectio
 - Two dataset-poisoning guards in `teacher/validate.py`: `fabricated_absent_side` for one-sided comparisons, `answered_absent` for adversarial rows that did not refuse
 - `config.decide_k()` holds the pre-committed retrieval-k rule; nothing about k is decided after seeing the measurement
 - `training/artifacts/chunk_manifest.jsonl` and `ledger.json` committed. `training/.scratch/` holds vendored docs and is gitignored
+- `packages/evalcore/` is the harness: `schema.py` (suite, case, thresholds, results), `scorers.py` (exact, regex, citation, refusal), `judge.py` (provider abstraction, SQLite cache keyed on case+output+rubric+judge version, full-jitter backoff), `runner.py` (`ModelClient` protocol plus `StubModel`/`EchoContextModel`), `diff.py` (case deltas and the breach logic), `report.py` (terminal, markdown PR comment, self-contained HTML), `loader.py`, `cli.py`
+- `evalgate-eval` CLI: `build-suite` from the golden export, `run`, `gate`. Exit 1 from `gate` is the merge block
+- `apps/api/` v0: register suites, submit runs, list runs, explicit baseline promotion per (suite, branch), `/diff`, and `/suites/{id}/gate` returning the verdict plus PR comment. `MemoryStore` now, Postgres DDL written in `store.py` for P2
+- `.github/workflows/eval-gate.yml` scaffolded: builds the suite, runs the candidate, restores the judge cache, comments the diff (updating one sticky comment), uploads the report, fails on a breach
 - `workers/`, `infra/terraform/`, `infra/k8s/`, `analytics/` are README placeholders and are not packaged yet
 
 ## 4. Environment state
 
 - Dev machine Apple M1 Pro 16 GB, macOS 26. Docker runtime is Docker Desktop, with OrbStack installed but not selected
 - **A native Postgres already owns 127.0.0.1:5432 on this machine.** A host-level listener shadows the container's port mapping, so `db init` fails with `role "evalgate" does not exist` against a perfectly healthy container. The dev stack therefore runs on **5433** via `POSTGRES_PORT=5433` in `.env`, with `DATABASE_URL` matching. The compose default stays 5432 for anyone else; this is per-machine config
-- Training machine is a separate Windows box with an RTX 5080 16 GB. Not configured yet. Needs PyTorch cu128 for sm_120
+- Training runs on this same M1 Pro through MLX. No second machine, no CUDA. `mlx-lm` is not installed yet; that happens at P1.2
+- **Stop the dev Docker stack before P1.2 training.** The corpus is not needed once retrieved contexts are baked into the dataset, and 16 GB of unified memory is shared with macOS
 - GitHub repo `starJin2003/EvalGate`, public, branch `main`, no branch protection yet since that is P3
 - pre-commit hooks installed locally
 - Accounts done. GitHub
@@ -77,7 +82,7 @@ Anything waiting on a human goes here so a fresh session does not silently work 
 
 ## 7. Next action
 
-**Waiting on Jinwoo.** Question set is complete and verified; stopped before any teacher spend as instructed. Resume with `teacher retrieval`, which reports retrieval span and applies the pre-committed k rule, then `teacher dry-run` (20 items, ~$0.02), which stops again for approval before the full batch.
+Teacher batch part 1 of 2 is in flight. When it lands: `teacher collect`, then submit the remaining ~197, then `golden select` / `golden export` and hand review. P1.4 and the P3 gate are already built against stubs; P1.2 (MLX) and P1.3 (GGUF) are the next real work, and the only change P1.4 needs afterwards is pointing the runner at a real endpoint.
 
 ## 8. Session log
 

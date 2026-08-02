@@ -49,7 +49,10 @@ PRICES: dict[str, tuple[float, float]] = {
 BATCH_DISCOUNT = 0.5
 
 # --- Corpus and dataset shape ------------------------------------------------
-RETRIEVAL_K = 4
+# Raised from 4 to 8 on 2026-08-01 by the pre-committed rule below: comparison
+# questions spanned 2+ repos in only 24.0% of cases at k=4, against a 50% threshold.
+# Applies to training and eval alike; P1.4 must retrieve at this same k.
+RETRIEVAL_K = 8
 MIN_CHUNK_PROSE_CHARS = 200
 MAX_CHUNK_TOKENS = 900
 
@@ -142,6 +145,30 @@ MAX_TEACHER_ATTEMPTS = 2
 GOLDEN_PER_CATEGORY = 24  # 96 total, inside the 80-100 band
 
 DRY_RUN_SIZE = 20
+
+# The Batch API caps *enqueued* tokens per model per org. Measured 2026-08-01:
+# gpt-5-mini is 5,000,000, and the full 1,880-request teacher run is ~5.3M input
+# alone, so it failed outright with token_limit_exceeded and processed nothing.
+# The cap counts in-flight work, so shards must complete before the next is sent.
+# Budget covers input plus expected output, with margin, since it is unclear
+# whether the cap counts reserved completions.
+ENQUEUED_TOKEN_LIMIT = 5_000_000
+SHARD_TOKEN_BUDGET = 3_500_000
+
+# Reasoning effort for the teacher. Left at the model default after a 20-item A/B
+# on identical inputs, 2026-08-01.
+#
+# "low" costs 454 output tokens against 1,209 and would have halved the full run to
+# $1.44, and on aggregate metrics it looked equal or better: 20/20 valid vs 19/20,
+# identical refusal counts, both guards clean. Reading the prose reversed that. On
+# comparison questions low truncates one side: asked for the trade-offs between
+# async and sync FastAPI tests it answered only the async half in 30 words against
+# 150, never mentioning synchronous testing, while citing the very chunk that
+# carried that side. Decline language appeared in 3 of 10 comparison rows against 1.
+#
+# The model is being distilled to do grounded comparison. Training it on answers
+# that address half a two-sided question teaches the failure directly.
+TEACHER_REASONING_EFFORT: str | None = None
 
 
 def load_env() -> None:

@@ -173,6 +173,14 @@ def cmd_teacher_reset_retrieval(_: argparse.Namespace) -> None:
     _print(teacher_batch.reset_retrieval())
 
 
+def cmd_teacher_revalidate(_: argparse.Namespace) -> None:
+    _print(teacher_batch.revalidate())
+
+
+def cmd_teacher_flagged(args: argparse.Namespace) -> None:
+    _print(teacher_batch.flagged_rows(limit=args.limit))
+
+
 def cmd_teacher_audit(args: argparse.Namespace) -> None:
     _print(teacher_batch.poisoning_rates())
     if args.regenerate:
@@ -194,7 +202,9 @@ def cmd_teacher_audit(args: argparse.Namespace) -> None:
 
 def cmd_teacher_dry_run(args: argparse.Namespace) -> None:
     ledger = Ledger()
-    report = teacher_batch.dry_run(ledger, n=args.n)
+    report = teacher_batch.dry_run(
+        ledger, n=args.n, reasoning_effort=args.reasoning_effort, redo=args.redo
+    )
     _print(report)
     print(ledger.summary())
     print(
@@ -206,16 +216,28 @@ def cmd_teacher_dry_run(args: argparse.Namespace) -> None:
 
 
 def cmd_teacher_submit(args: argparse.Namespace) -> None:
-    _print({"batch_id": teacher_batch.submit(Ledger(), approved=args.approve_full_run)})
+    result = teacher_batch.submit(Ledger(), approved=args.approve_full_run)
+    _print(result)
+    if result["still_pending_after"]:
+        print(
+            f"\n{result['still_pending_after']} questions remain. The enqueued-token cap\n"
+            f"is on in-flight work, so wait for part {result['part']} to complete:\n"
+            f"  teacher poll --wait && teacher collect\n"
+            f"then rerun submit for the next shard."
+        )
 
 
 def cmd_teacher_poll(args: argparse.Namespace) -> None:
-    _print({"status": openai_batch.poll(teacher_batch.JOB, wait=args.wait)})
+    part = args.part if args.part is not None else max(0, teacher_batch.next_part() - 1)
+    _print(
+        {"part": part, "status": openai_batch.poll(teacher_batch.part_job(part), wait=args.wait)}
+    )
 
 
-def cmd_teacher_collect(_: argparse.Namespace) -> None:
+def cmd_teacher_collect(args: argparse.Namespace) -> None:
     ledger = Ledger()
-    _print(teacher_batch.collect(ledger))
+    part = args.part if args.part is not None else max(0, teacher_batch.next_part() - 1)
+    _print(teacher_batch.collect(ledger, job=teacher_batch.part_job(part)))
     print(ledger.summary())
 
 
@@ -298,17 +320,28 @@ def build_parser() -> argparse.ArgumentParser:
     tr.set_defaults(func=cmd_teacher_retrieval)
     td = t.add_parser("dry-run", help="measure real tokens on a small sample (paid)")
     td.add_argument("-n", type=int, default=config.DRY_RUN_SIZE)
+    td.add_argument("--reasoning-effort", choices=("low", "medium", "high"))
+    td.add_argument("--redo", action="store_true", help="re-run over the same sample")
     td.set_defaults(func=cmd_teacher_dry_run)
     ts = t.add_parser("submit", help="submit the full teacher batch (paid)")
     ts.add_argument("--approve-full-run", action="store_true")
     ts.set_defaults(func=cmd_teacher_submit)
     tp = t.add_parser("poll")
     tp.add_argument("--wait", action="store_true")
+    tp.add_argument("--part", type=int, help="shard index; defaults to the latest")
     tp.set_defaults(func=cmd_teacher_poll)
-    t.add_parser("collect").set_defaults(func=cmd_teacher_collect)
+    tc = t.add_parser("collect")
+    tc.add_argument("--part", type=int, help="shard index; defaults to the latest")
+    tc.set_defaults(func=cmd_teacher_collect)
     t.add_parser(
         "reset-retrieval", help="clear attached retrieval so it can be redone at a new k"
     ).set_defaults(func=cmd_teacher_reset_retrieval)
+    t.add_parser(
+        "revalidate", help="re-apply validation to stored answers, no regeneration"
+    ).set_defaults(func=cmd_teacher_revalidate)
+    tf = t.add_parser("flagged", help="full text of poisoned answers, for review")
+    tf.add_argument("--limit", type=int, default=20)
+    tf.set_defaults(func=cmd_teacher_flagged)
     ta = t.add_parser("audit", help="fabrication and refusal-failure rates")
     ta.add_argument("--regenerate", action="store_true", help="clear poisoned answers for reruns")
     ta.add_argument("--drop", action="store_true", help="delete the questions outright")

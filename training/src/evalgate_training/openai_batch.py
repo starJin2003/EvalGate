@@ -16,8 +16,15 @@ from openai import OpenAI
 from . import config
 
 
-def client() -> OpenAI:
-    return OpenAI(api_key=config.openai_api_key())
+def client(timeout: float | None = None, max_retries: int = 2) -> OpenAI:
+    return OpenAI(api_key=config.openai_api_key(), timeout=timeout, max_retries=max_retries)
+
+
+# The teacher payload is ~24 MB at k=8. The SDK default timeout is too short for
+# that upload on a home connection, and a mid-upload APIConnectionError leaves no
+# batch behind, so a retry is safe rather than a double-submit risk.
+UPLOAD_TIMEOUT_S = 900.0
+UPLOAD_RETRIES = 5
 
 
 def chat_request(custom_id: str, model: str, messages: list[dict[str, Any]], schema: dict) -> dict:
@@ -73,9 +80,12 @@ def submit(job: str, requests: list[dict], workdir: Path) -> str:
         for r in requests:
             fh.write(json.dumps(r) + "\n")
 
-    api = client()
+    size_mb = payload.stat().st_size / 1_048_576
+    print(f"uploading {len(requests)} requests ({size_mb:.1f} MB) for job {job}")
+    api = client(timeout=UPLOAD_TIMEOUT_S, max_retries=UPLOAD_RETRIES)
     with payload.open("rb") as fh:
         uploaded = api.files.create(file=fh, purpose="batch")
+    print(f"uploaded as {uploaded.id}, creating batch")
     batch = api.batches.create(
         input_file_id=uploaded.id,
         endpoint="/v1/chat/completions",

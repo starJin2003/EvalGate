@@ -10,9 +10,10 @@ merges through a GitHub Actions check.
 Full brief in [BUILD_PLAN.md](BUILD_PLAN.md). Running log of decisions, problems, and
 measured numbers in [DECISIONS.md](DECISIONS.md).
 
-> **Status: P1.1 Data.** Scaffold, dev stack, and CI are green. The dataset pipeline
-> is built and the corpus is parsed; teacher generation is gated on an approval step.
-> Training, serving, and the gate land in P1.2 through P3.
+> **Status: P1.1 Data (teacher batch in flight).** Corpus, questions, and retrieval are
+> done. The P1.4 harness and the P3 gate are built and tested against stubbed model
+> outputs. P1.2 (MLX LoRA on the M1) and P1.3 (GGUF + llama.cpp) are next; after them
+> the only harness change is pointing the runner at a real endpoint.
 
 ## Architecture
 
@@ -154,8 +155,11 @@ uv run evalgate-training teacher retrieval     # top-k context per question
                                                # applies the pre-committed k rule
 uv run evalgate-training teacher dry-run       # 20 items, ~$0.02  <-- STOP AND REVIEW
 
-# Only after reading artifacts/dry_run_report.json
-uv run evalgate-training teacher submit --approve-full-run   # ~$0.86
+# Only after reading artifacts/dry_run_report.json.
+# The Batch API caps enqueued tokens per model (5M for gpt-5-mini), and the full
+# run is ~5.3M input alone, so it ships in shards. The cap is on in-flight work,
+# so each part must finish before the next goes out. Repeat until nothing pends:
+uv run evalgate-training teacher submit --approve-full-run
 uv run evalgate-training teacher poll --wait
 uv run evalgate-training teacher collect
 
@@ -233,12 +237,48 @@ if any golden id appears in the training split, and a test asserts the same inva
 Open `artifacts/golden_review.html` to hand-check the cases — teacher output is not
 ground truth until reviewed.
 
+## The gate (P1.4 + P3)
+
+The harness is built against a stubbed model, so the whole merge-blocking path is
+provable before a trained model exists. P1.3 swaps in a real llama-server endpoint
+and nothing else changes.
+
+```bash
+uv run evalgate-eval build-suite \
+  --golden training/artifacts/golden_set.jsonl --out artifacts/suite.json
+uv run evalgate-eval run --suite artifacts/suite.json \
+  --outputs outputs.json --out artifacts/candidate.json --judge
+uv run evalgate-eval gate --suite artifacts/suite.json \
+  --baseline artifacts/baseline.json --candidate artifacts/candidate.json \
+  --comment comment.md --html report.html
+# exit 0 passes, exit 1 blocks the merge
+```
+
+**Category thresholds are the point.** The v1→v2 training experiment is designed
+to raise the overall average while the refusal category collapses. A gate that
+watched only the average would green-light it. Every category is checked against a
+threshold; `category_thresholds` tightens specific ones, and adversarial carries
+both a tighter drop limit and a score floor.
+
+Other decisions worth knowing: thresholds are **absolute** drops, not relative, so
+a PR comment is defensible to someone who didn't write it. Baseline promotion is
+**explicit** per (suite, branch) — auto-promoting the newest run on main would
+rebase the target a regression was supposed to be measured against. An errored
+case scores **0** rather than being skipped, so a model that crashes on its hardest
+cases cannot post a higher average than one that answers them badly. Adversarial
+cases are scored on refusal only, since a correct refusal cites nothing.
+
+The judge is provider-abstracted with a SQLite cache keyed on case + output +
+rubric + **judge version**, so changing the judge invalidates old verdicts instead
+of silently mixing them. `eval-gate.yml` restores that cache across PRs, which is
+what keeps the gate affordable on a zero-dollar budget.
+
 ## Repo layout
 
 | Path | What lives here | Phase |
 |---|---|---|
-| `apps/api/` | FastAPI service: suites, runs, diffs, traces, promotion | P1 |
-| `packages/evalcore/` | Eval harness: suite schema, runner, scorers, judge client, diff | P1 |
+| `apps/api/` | FastAPI v0: suites, runs, baseline promotion, `/diff`, `/gate` | P1.4 |
+| `packages/evalcore/` | Eval harness: schema, scorers, judge + cache, runner, diff, reports, `evalgate-eval` CLI | P1.4 |
 | `packages/sdk/` | pip-installable trace client | P4 |
 | `workers/` | Kafka consumer, promotion worker, judge rescore worker | P4 |
 | `training/` | Corpus parsing, question generation, retrieval, teacher answers | P1.1 |
@@ -246,7 +286,7 @@ ground truth until reviewed.
 | `infra/k8s/` | k3s manifests and helm values | P2 |
 | `infra/postgres/init/` | Dev Postgres init SQL (pgvector) | P0 |
 | `analytics/` | Export DAG helpers, Spark jobs, dbt project | P5 |
-| `.github/workflows/` | `ci.yml` (lint, tests, dev stack), `eval-gate.yml` | P0, P3 |
+| `.github/workflows/` | `ci.yml` (lint, tests, dev stack), `eval-gate.yml` (the merge gate) | P0, P3 |
 
 ## Development
 

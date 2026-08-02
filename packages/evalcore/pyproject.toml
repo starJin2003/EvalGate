@@ -1,9 +1,14 @@
 [project]
 name = "evalcore"
-version = "0.0.1"
+version = "0.1.0"
 description = "EvalGate eval harness: suite schema, runner, scorers, judge client, diff."
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pydantic>=2.9",
+]
+
+[project.scripts]
+evalgate-eval = "evalcore.cli:main"
 
 [build-system]
 requires = ["hatchling"]

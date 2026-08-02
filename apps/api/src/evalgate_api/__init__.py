@@ -1,9 +1,12 @@
 """EvalGate API service.
 
-P0 is a package skeleton only. The FastAPI app, Postgres models, and the
-suite/run/diff endpoints land in P1.
+v0: register suites, submit runs, promote baselines, fetch case-level diffs, and
+serve the gate verdict that `eval-gate.yml` turns into a merge decision.
 """
 
-__version__ = "0.0.1"
+from .app import app, create_app
+from .store import Baseline, MemoryStore, Store
 
-__all__ = ["__version__"]
+__version__ = "0.1.0"
+
+__all__ = ["Baseline", "MemoryStore", "Store", "__version__", "app", "create_app"]
