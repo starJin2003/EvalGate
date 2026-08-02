@@ -337,6 +337,10 @@ def cmd_train_trajectory(args: argparse.Namespace) -> None:
     print(train_probe.format_trajectory(train_probe.read_trajectory(args.log)))
 
 
+def cmd_train_eval_adapters(_: argparse.Namespace) -> None:
+    print(train_probe.format_eval(train_probe.eval_adapters()))
+
+
 def cmd_budget(_: argparse.Namespace) -> None:
     print(Ledger().summary())
 
@@ -470,6 +474,9 @@ def build_parser() -> argparse.ArgumentParser:
     tj = t.add_parser("trajectory", help="print the probe loss trajectory from its log")
     tj.add_argument("--log", help=f"default {config.TRAIN_PROBE['loss_log']}")
     tj.set_defaults(func=cmd_train_trajectory)
+    t.add_parser(
+        "eval-adapters", help="score baseline + every saved checkpoint on the FULL valid split"
+    ).set_defaults(func=cmd_train_eval_adapters)
 
     sub.add_parser("budget", help="show cumulative spend").set_defaults(func=cmd_budget)
     return p

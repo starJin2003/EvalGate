@@ -110,6 +110,76 @@ def run_probe(overrides: dict[str, Any] | None = None) -> dict[str, Any]:
     return {"loss_log": str(log_path), "adapter_path": args.adapter_path}
 
 
+def eval_adapters(checkpoints: list[str] | None = None) -> dict[str, Any]:
+    """Loss for the untrained baseline and each saved checkpoint over the FULL
+    valid split.
+
+    Why this is not just a bigger version of the in-training eval: mlx-lm's
+    `evaluate` calls `iterate_batches` with no `seed`, so batch *order* comes from
+    the global NumPy RNG, which advances through every training and validation
+    permutation. Consecutive in-training evals therefore score **different** 25-batch
+    subsets, and the 200-vs-400 comparison was never paired. With `num_batches=-1`
+    the whole split is consumed in one pass, and a token-weighted mean over every
+    row is order-independent -- so these numbers are deterministic and comparable.
+
+    The baseline applies LoRA and loads no adapter. LoRA's B matrix is zero-init, so
+    that is exactly the base model, and it keeps every arm on one code path.
+    """
+    from mlx_lm import load
+    from mlx_lm.lora import load_dataset
+    from mlx_lm.tuner import linear_to_lora_layers
+    from mlx_lm.tuner.datasets import CacheDataset
+    from mlx_lm.tuner.trainer import default_loss, evaluate
+
+    settings = dict(config.TRAIN_PROBE)
+    settings.pop("loss_log")
+    args = build_args(settings)
+    adapter_dir = Path(args.adapter_path)
+    names = checkpoints or sorted(p.name for p in adapter_dir.glob("[0-9]*_adapters.safetensors"))
+
+    model, tokenizer = load(args.model, tokenizer_config={"trust_remote_code": True})
+    _train, valid_set, _test = load_dataset(args, tokenizer)
+    valid = CacheDataset(valid_set)
+
+    def score(adapter: str | None) -> float:
+        m, _ = load(args.model, tokenizer_config={"trust_remote_code": True})
+        m.freeze()
+        linear_to_lora_layers(m, args.num_layers, args.lora_parameters)
+        if adapter:
+            m.load_weights(str(adapter_dir / adapter), strict=False)
+        m.eval()
+        return evaluate(
+            model=m,
+            dataset=valid,
+            batch_size=args.batch_size,
+            num_batches=-1,  # -1 consumes the whole split
+            max_seq_length=args.max_seq_length,
+            loss=default_loss,
+        )
+
+    results = {"rows": len(valid_set), "losses": {}}
+    results["losses"]["baseline"] = score(None)
+    for name in names:
+        results["losses"][name.split("_")[0].lstrip("0") or "0"] = score(name)
+
+    del model
+    return results
+
+
+def format_eval(r: dict[str, Any]) -> str:
+    losses = r["losses"]
+    base = losses["baseline"]
+    out = [f"full valid split, {r['rows']} rows, num_batches=-1 (deterministic)", ""]
+    out.append(f"{'checkpoint':<12}{'val_loss':>10}{'vs prev':>10}{'vs baseline':>13}")
+    prev = None
+    for name, v in losses.items():
+        delta = "" if prev is None else f"{v - prev:+.4f}"
+        drop = "" if name == "baseline" else f"{100 * (base - v) / base:.1f}%"
+        out.append(f"{name:<12}{v:>10.4f}{delta:>10}{drop:>13}")
+        prev = v
+    return "\n".join(out)
+
+
 def read_trajectory(path: Path | None = None) -> dict[str, Any]:
     """Read the probe log back without rerunning anything."""
     path = Path(path or config.TRAIN_PROBE["loss_log"])
