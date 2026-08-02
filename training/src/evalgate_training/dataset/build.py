@@ -29,9 +29,10 @@ import json
 import statistics
 from typing import Any
 
+from evalcore import prompt
+
 from .. import config
 from ..golden.export import _rows
-from ..teacher.prompts import SYSTEM as TEACHER_SYSTEM
 
 SPLITS = ("train", "valid", "test")
 
@@ -51,24 +52,13 @@ def file_digest(path) -> str:
 def to_example(row: dict) -> dict:
     """One chat-format record. The user turn is byte-identical to what the teacher
     saw, so the student trains on the same prompt shape P1.4 will evaluate on."""
-    context = "\n\n---\n\n".join(
-        f"[{c['label']}] repo={c['repo']} | {c['heading_path']}\n"
-        f"source: {c['source_url']}\n\n{c['content']}"
-        for c in row["context"]
-    )
     return {
         "question_id": row["question_id"],
         "category": row["category"],
         "repo": row["repo"],
         "refused": row["refused"],
         "messages": [
-            {"role": "system", "content": TEACHER_SYSTEM},
-            {
-                "role": "user",
-                "content": (
-                    f"Documentation excerpts:\n\n{context}\n\n---\n\nQuestion: {row['question']}"
-                ),
-            },
+            *prompt.build_messages(row["question"], row["context"]),
             {"role": "assistant", "content": row["answer"]},
         ],
     }

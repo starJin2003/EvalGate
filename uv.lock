@@ -210,6 +210,7 @@ name = "evalgate-training"
 version = "0.0.1"
 source = { editable = "training" }
 dependencies = [
+    { name = "evalcore" },
     { name = "openai" },
     { name = "pgvector" },
     { name = "psycopg", extra = ["binary"] },
@@ -221,6 +222,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "evalcore", editable = "packages/evalcore" },
     { name = "openai", specifier = ">=1.60" },
     { name = "pgvector", specifier = ">=0.3" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2" },

@@ -4,6 +4,7 @@ version = "0.0.1"
 description = "P1.1 data pipeline: corpus parsing, question generation, retrieval, teacher answers."
 requires-python = ">=3.12"
 dependencies = [
+    "evalcore",
     "openai>=1.60",
     "pgvector>=0.3",
     "psycopg[binary]>=3.2",
@@ -12,6 +13,9 @@ dependencies = [
     "pyyaml>=6.0",
     "tiktoken>=0.8",
 ]
+
+[tool.uv.sources]
+evalcore = { workspace = true }
 
 [project.scripts]
 evalgate-training = "evalgate_training.cli:main"

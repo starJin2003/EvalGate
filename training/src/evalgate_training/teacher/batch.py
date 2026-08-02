@@ -6,6 +6,8 @@ import json
 
 from openai import OpenAI
 
+from evalcore import prompt
+
 from .. import config, db, openai_batch
 from ..budget import Ledger
 from ..retrieval import embed_query, retrieve
@@ -130,9 +132,9 @@ def _context_for(
         label_to_chunk[label] = r[0]
         # A chunk always vouches for its own project, plus any it names in prose.
         label_mentions[label] = validation.repos_named(r[4]) | {r[1]}
-        blocks.append(f"[{label}] repo={r[1]} | {r[2]}\nsource: {r[3]}\n\n{r[4]}")
+        blocks.append(prompt.render_chunk_block(label, r[1], r[2], r[3], r[4]))
     repos = sorted({r[1] for r in ordered})
-    return "\n\n---\n\n".join(blocks), labels, label_to_chunk, repos, label_mentions
+    return prompt.CONTEXT_SEPARATOR.join(blocks), labels, label_to_chunk, repos, label_mentions
 
 
 def _store(
