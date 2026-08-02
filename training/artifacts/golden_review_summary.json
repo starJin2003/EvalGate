@@ -1,0 +1,61 @@
+{
+  "seed": "evalgate-golden-v1",
+  "cases": 96,
+  "judged": 96,
+  "unjudged": 0,
+  "passed": 92,
+  "failed": 4,
+  "pass_rate_pct": 95.8,
+  "by_category": {
+    "adversarial": {
+      "judged": 24,
+      "passed": 24,
+      "pass_rate_pct": 100.0
+    },
+    "comparison": {
+      "judged": 24,
+      "passed": 22,
+      "pass_rate_pct": 91.7
+    },
+    "factual": {
+      "judged": 24,
+      "passed": 23,
+      "pass_rate_pct": 95.8
+    },
+    "howto": {
+      "judged": 24,
+      "passed": 23,
+      "pass_rate_pct": 95.8
+    }
+  },
+  "by_repo": {
+    "fastapi": {
+      "judged": 24,
+      "passed": 21,
+      "pass_rate_pct": 87.5
+    },
+    "grafana": {
+      "judged": 24,
+      "passed": 24,
+      "pass_rate_pct": 100.0
+    },
+    "prometheus": {
+      "judged": 24,
+      "passed": 23,
+      "pass_rate_pct": 95.8
+    },
+    "pydantic": {
+      "judged": 24,
+      "passed": 24,
+      "pass_rate_pct": 100.0
+    }
+  },
+  "failures_by_first_failed_criterion": {
+    "1 completeness": 2,
+    "2 groundedness": 2,
+    "3 refusal validity": 0,
+    "4 citation accuracy": 0
+  },
+  "judgment_records": 96,
+  "log": "/Users/jin/Desktop/Dev/EvalGate/training/artifacts/golden_review.jsonl"
+}

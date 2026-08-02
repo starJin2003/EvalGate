@@ -10,13 +10,13 @@ Last updated 2026-08-02.
 
 ## 1. Where we are
 
-**P2 provisioning is done. The OCI node exists and runs k3s. P1.1 is down to its last step: the 96-case hand review.**
+**P1.1 is closed. The hand review passed at 95.8% and the pre-committed rule sends the full valid set to P1.2 unchanged. P2 provisioning is done; the OCI node exists and runs k3s.**
 
 | Phase | Status |
 |---|---|
 | P0 Bootstrap | Done 2026-07-31 |
-| P1.1 Data | **Teacher complete 2026-08-02, hand review pending.** All 1,900 answered, 97.6% valid, $2.89 of $5.00. Sample selected; 0 of 96 judged |
-| P1.2 Training | Not started |
+| P1.1 Data | **Done 2026-08-02.** 1,900 answered, 1,854 valid (97.6%), $2.89 of $5.00. Hand review 92/96 = 95.8%, criteria 3 and 4 clean. Acceptance rule fired as written |
+| P1.2 Training | **Not started. Head of the critical path** |
 | P1.3 Serving | Not started |
 | P1.4 Harness | Built against stubs 2026-08-01; needs a real endpoint at P1.3 |
 | P2 Infra | **Provisioning done 2026-08-02.** Node live, k3s up, remote state. Deploys, monitoring, and k6 not started |
@@ -54,6 +54,7 @@ Fill this in as artifacts land. A new session should be able to read this sectio
 - **All 1,900 teacher answers collected**, `gpt-5-mini` via the Batch API in 3 shards (840 + 843 + 197) plus the 20 dry-run rows. 1,854 valid, 97.6%. Guards final: `answered_absent` 0 of 400 adversarial, `fabricated_absent_side` 6 of 400 comparison. Comparison refusal rate 36.0%
 - `training/artifacts/golden_manifest.json` holds the 96-case hand-review sample, 6 per (category, repo) cell, seed `evalgate-golden-v1`, no shortfall cells. Rerunning `golden select` rewrites it byte-identically
 - `golden/review.py` and `golden/review_server.py` are the hand-review tool. `golden review` serves a localhost two-pane UI, one case per screen, citation markers linked to the chunks stored on the row; verdicts append to `golden_review.jsonl` and `golden summary` writes `golden_review_summary.json`. No model calls anywhere in it
+- **The hand review is complete and its artifacts are committed.** `training/artifacts/golden_review.jsonl` holds 96 judgment records (96 judged, 0 unjudged, no rejudgments) and `golden_review_summary.json` the derived rates: 92/96 = 95.8% overall; adversarial 24/24, comparison 22/24, factual 23/24, howto 23/24; grafana and pydantic 24/24, prometheus 23/24, fastapi 21/24. Failures by first failed criterion: completeness 2, groundedness 2, refusal validity 0, citation accuracy 0
 - Top-ups backfill per (category, repo) cell using per-repo leak rates, not an aggregate gap. `questions trim` removes surplus from cells that overshoot
 - Teacher regeneration capped at 2 attempts per row via `questions.teacher_attempts`, then the row is dropped
 - Two dataset-poisoning guards in `teacher/validate.py`: `fabricated_absent_side` for one-sided comparisons, `answered_absent` for adversarial rows that did not refuse
@@ -104,14 +105,13 @@ Fill this in as artifacts land. A new session should be able to read this sectio
 
 Anything waiting on a human goes here so a fresh session does not silently work around it.
 
-- Hugging Face write token needs to be in `.env` before P1.2 can pull the base model
-- **Golden set hand review, 96 cases. This is the only thing standing between here and P1.2.** The sample is selected and the tool is built: `uv run evalgate-training golden review` opens case 1 at `http://127.0.0.1:8765`. Resumable, so it can be done in sittings; `golden summary` shows progress at any point.
-  **The acceptance rule is pre-committed** in DECISIONS.md, recorded 2026-08-02 before case 1 was judged, so the result cannot move the threshold. Short form, on the **overall** rate only: **>= 90%** (>= 87 of 96) proceed to P1.2 unchanged; **80-89%** (77-86) proceed only if the failures concentrate in criterion 4 and only after building the pgvector citation-target check and re-validating all 1,900 rows, but stop and fix the teacher if they spread across criteria 1-3; **< 80%** (<= 76) do not train, regenerate the affected categories. Separately, any criterion 3 failure on a **comparison refusal** is a generation bug to fix before P1.2; if there are none, the 36% comparison refusal rate is honest behaviour and the mix stays a design choice.
-  Do not apply the rule to per-category rates (n=24, +/- 12 to 20 points) and do not read per-cell rates at all (n=6, no information). The sample is drawn from valid rows only, so it measures data that already cleared automated validation
+- **Hugging Face write token needs to be in `.env` before P1.2 can pull the base model. This is now the only human blocker on the critical path**
 - Add `export AWS_REQUEST_CHECKSUM_CALCULATION=when_required` to the shell profile. Terraform state operations fail without it, with an error that blames credentials
 
 ## 6. Known issues and deferred items
 
+- **Open question carried into the P1.2 eval, from the hand review: fastapi took 3 of the 4 failures at 21/24.** Per-repo n is 24 (+/- ~13 points), so this is a direction to check, not a measured gap. Look for it in the P1.2 eval; do not act on it in the data
+- **Accepted risk carried into the P1.2 eval: comparison-avoidance bias.** The comparison category refuses 36.0% of the time and that mix was deliberately left as is (DECISIONS, 2026-08-02), so the trained model may decline comparisons it could answer. Measure it after training — if comparison refusals come out above the teacher's 36%, the mix is the first thing to change. All 5 comparison refusals in the sample were valid, so the teacher's own bias is toward under-refusing, not over-refusing
 - ~~OCI Pay As You Go may allocate only 2 OCPU and 12 GB~~ **Resolved 2026-08-02. 4 OCPU / 24 GB launched and is running.** No shrink needed, and the 2 OCPU contingency is off the table unless the instance is ever lost
 - Kafka memory budget and single versus dual instance was deferred until that verification. **The verification is done, so this decision is now unblocked** and can be made whenever P4 starts. It still needs a human
 - **A1 capacity is a lottery and this instance is not replaceable on demand.** All three ADs were returning "Out of capacity" hours before it launched. Never `terraform destroy` or taint the instance to pick up a config change. `ignore_changes` covers the image OCID and `metadata["user_data"]` for exactly this reason; bootstrap fixes are applied to the live node over SSH and land in the template for the next build
@@ -123,23 +123,27 @@ Anything waiting on a human goes here so a fresh session does not silently work 
 
 Two independent threads.
 
-**P1.1, one step left and it needs a human.** The teacher stage is closed: 1,900 answers, 97.6% valid, $2.89 spent. `golden select` has run, so `artifacts/golden_manifest.json` fixes the 96 cases. The remaining step is the hand review itself:
+**P1.2 Training is the head of the critical path.** P1.1 is closed — the hand review passed at 95.8% and the pre-committed rule sends the **full valid set, all 1,854 rows, unchanged**: no citation-target check, no re-validation, no regeneration. Nothing in the data stage is outstanding. Next steps, in order:
 
 ```bash
-docker compose -f docker-compose.dev.yml up -d      # the tool reads chunks from Postgres
-uv run evalgate-training golden review              # opens case 1; quit and rerun anytime
-uv run evalgate-training golden summary             # pass rate so far
+docker compose -f docker-compose.dev.yml up -d      # dataset export reads from Postgres
+uv run evalgate-training dataset export             # the 1,854 valid rows, chunks baked in
+docker compose -f docker-compose.dev.yml down       # then free the 16 GB before training
 ```
 
-Then `dataset export` and P1.2 begins. P1.4 and the P3 gate are already built against stubs; P1.2 (MLX) and P1.3 (GGUF) are the next real work, and the only change P1.4 needs afterwards is pointing the runner at a real endpoint.
+Then P1.2 proper: put the Hugging Face write token in `.env`, install `mlx-lm`, and LoRA fine-tune Qwen3 1.7B Instruct on the M1 Pro with thinking mode off. Two things from the review travel with it — check whether fastapi underperforms the other repos, and whether comparison refusals exceed the teacher's 36% (section 6).
 
-**P2 remainder, now unblocked by a running node.** In rough order: deploy Postgres onto k3s with a block volume PVC; deploy `apps/api` (needs an arm64 image and `store.py`'s Postgres DDL wired up in place of `MemoryStore`); add `/metrics` to FastAPI and install kube-prometheus-stack via helm, sized to 24 GB; commit a Grafana dashboard JSON; write and run the k6 script and record RPS, p95, error rate, and node CPU/RAM idle versus loaded. The model server waits on P1.3 producing a GGUF.
+After that P1.3 (GGUF serving) and then P1.4, which is already built against stubs and needs only the runner pointed at a real endpoint. The P3 gate workflow is likewise scaffolded and waiting on the same endpoint.
 
-Nothing in P2's remainder blocks P1.1, and P1.1 does not block P2's remainder except for the model server.
+**P2 remainder, independent of all of the above.** In rough order: deploy Postgres onto k3s with a block volume PVC; deploy `apps/api` (needs an arm64 image and `store.py`'s Postgres DDL wired up in place of `MemoryStore`); add `/metrics` to FastAPI and install kube-prometheus-stack via helm, sized to 24 GB; commit a Grafana dashboard JSON; write and run the k6 script and record RPS, p95, error rate, and node CPU/RAM idle versus loaded. The model server waits on P1.3 producing a GGUF.
+
+Nothing in P2's remainder blocks P1.2, and P1.2 blocks nothing in P2 except the model server, which waits on P1.3's GGUF.
 
 ## 8. Session log
 
 Newest first. Three to five lines each. What was attempted, what landed, what broke, what the next session needs to know.
+
+**2026-08-02 P1.1 closed. Hand review 92/96 = 95.8%, and the pre-committed rule fired without amendment.** All 96 cases judged, no rejudgments. The result clears the `>= 90%` band, so the full valid set goes to P1.2 unchanged — no citation-target check, no re-validation of the 1,900 rows. The two most useful numbers are zeroes. **Criterion 4, citation accuracy: 0 failures across ~768 marker checks** — the one criterion automated validation structurally cannot check, because `uncited_sentence` is satisfied by *a* citation regardless of where it points, is the one that came back clean. **Criterion 3, refusal validity: 0 failures across all 31 refusals in the sample** (24 adversarial, 5 comparison, 1 factual, 1 howto), which settles the direction of the teacher's weakness: it **under-refuses, never over-refuses** — every decline was correct, and 3 of its 4 failures are cases where it should have declined and answered instead. All 4 failures land on criteria 1-2. Cases 50 and 52 had the second side of a two-part question absent from all 8 retrieved chunks and the teacher filled from the available side; case 2 looks like the same shape but is not — the second approach *was* retrieved, sitting uncited in C6, and the teacher substituted the wrong chunk, which no retrieval fix would catch; case 38 read a chunk backwards, naming both the spec and the migration guide authoritative where C1 says the spec is authoritative *and the guide may contain errors*. On the strength of criterion 3 the previously-open **comparison mix decision is now closed: leave 36.0% as is.** Trimming refusal rows would deepen the exact weakness the review found, comparison refusals are the only rows that teach declining under *partial* retrieval (adversarial rows turn on an absent symbol, not absent coverage of a present one), and the uneven mix is what makes a loss of refusal discipline visible as a per-category regression at P1.4. Comparison-avoidance bias is the accepted risk, to be measured after training rather than pre-empted in the data. Two things travel into P1.2 as open questions, both in section 6: that bias, and fastapi carrying 3 of 4 failures at 21/24 — n=24 per repo, so a direction to check, not a measurement. **P1.2 is now the head of the critical path; the only human blocker left is the Hugging Face token.**
 
 **2026-08-02 P1.1 Data, teacher stage closed and the review tool built.** Two jobs. First, reconciling the docs with reality: PROGRESS claimed the teacher batch was part 1 of 2 with ~197 rows left to submit, when it had actually finished in **3** shards (840 + 843 + 197) some sessions earlier and nobody wrote it down. Every headline number was re-derived from Postgres and `ledger.json` rather than promoted from memory, and all six agreed: **1,900 of 1,900 answered, 1,854 valid (97.58%), `answered_absent` 0 of 400, `fabricated_absent_side` 6 of 400, comparison refusal 36.0%, ledger $2.8930 of $5.00.** The interesting one is the split by category — adversarial is 100% valid and `howto` is worst at 94.0%, and every one of `howto`'s 30 failures is an uncited sentence rather than a grounding failure, so citation discipline, not hallucination, is the only failure mode that survived at scale. Second, the review tool. `golden select` now balances **6 per (category, repo) cell** instead of 24 per category and writes a manifest before any judging starts, so the sample is a commitment rather than something that can shrink once the verdicts look bad; selection is a sha256 sort over a fixed seed with no RNG, verified byte-identical across reruns. `golden review` serves a two-pane localhost UI — answer on the left, the row's stored chunks on the right, every `[C3]` a link that opens its chunk — with verdicts appended to JSONL after each judgment so quitting mid-review costs nothing. It calls no model and deliberately hides the validator's own flags, since showing `uncited_sentence` before the reviewer reads the answer would anchor exactly the criterion being judged. The old localStorage review page is deleted rather than kept: two verdict stores that can disagree is worse than one. **P1.1's only remaining step is a human reading 96 cases.**
 
