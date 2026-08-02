@@ -17,7 +17,7 @@ Last updated 2026-08-02.
 | P0 Bootstrap | Done 2026-07-31 |
 | P1.1 Data | **Done 2026-08-02.** 1,900 answered, 1,854 valid (97.6%), $2.89 of $5.00. Hand review 92/96 = 95.8%, criteria 3 and 4 clean. Acceptance rule fired as written |
 | P1.2 Training | **Probe done 2026-08-02, LR confirmed, long runs not started.** 600 iters at 5e-5: full-split val 5.4749 → 1.0056, monotonic, 81.6% drop. Schedule locked at 2,956 iters. Next is P1.3 against the probe adapter, then v1 and v2 back to back |
-| P1.3 Serving | Not started |
+| P1.3 Serving | **Pipeline proven 2026-08-03 against throwaway probe weights.** fuse → GGUF f16 → Q4_K_M (1.03 GB) → llama-server, arm64 native, 84 tok/s. Re-run against v1 when it exists |
 | P1.4 Harness | Built against stubs 2026-08-01; needs a real endpoint at P1.3 |
 | P2 Infra | **Provisioning done 2026-08-02.** Node live, k3s up, remote state. Deploys, monitoring, and k6 not started |
 | P3 Automation | Gate workflow and threshold logic scaffolded 2026-08-01 |
@@ -79,6 +79,7 @@ Fill this in as artifacts land. A new session should be able to read this sectio
 
 - Dev machine Apple M1 Pro 16 GB, macOS 26. Docker runtime is Docker Desktop, with OrbStack installed but not selected
 - **A native Postgres already owns 127.0.0.1:5432 on this machine.** A host-level listener shadows the container's port mapping, so `db init` fails with `role "evalgate" does not exist` against a perfectly healthy container. The dev stack therefore runs on **5433** via `POSTGRES_PORT=5433` in `.env`, with `DATABASE_URL` matching. The compose default stays 5432 for anyone else; this is per-machine config
+- **llama.cpp b10210 installed via Homebrew 2026-08-03.** All binaries `Mach-O 64-bit executable arm64`. The `convert_hf_to_gguf.py` script is not shipped by brew and comes from the source tarball in gitignored `training/.scratch/llamacpp/`; it runs under `uv run --no-project --with-requirements`, never in the project venv, because it pins numpy 1.26 / transformers 4.57 against the project's 2.5.1 / 5.14.1
 - Training runs on this same M1 Pro through MLX. No second machine, no CUDA. **mlx-lm 0.31.3 / mlx 0.32.0 installed 2026-08-02** via `uv sync --group mlx`; Metal available, arm64, no PyTorch pulled in
 - **Metal's recommended working set on this machine is 12.71 GB, not 16.** `mx.device_info()['max_recommended_working_set_size']`. Exceeding it does not fail — it swaps, and the run degrades to 20-45 s/step with `nan` losses that look like a numerical bug. Treat 12.71 GB as the real ceiling
 - **Stop the dev Docker stack before P1.2 training, but after `dataset export`.** The export reads chunks and answers from Postgres, so the order is export first, then `down`. Once the retrieved contexts are baked into the split files nothing in training touches the database
@@ -137,12 +138,53 @@ Two independent threads.
 
 The command, once the length is agreed:
 
-**The probe is done and 5e-5 is confirmed. Work is now strictly sequenced — nothing runs alongside a long run.**
+**P1.3's pipeline is proven and the probe artifacts are discarded. The next thing to run is v1, alone.**
 
-1. **P1.3 pipeline against the 600-iter probe adapter**, with nothing else resident. Fuse, convert to GGUF, quantize Q4_K_M, serve with llama-server, and confirm the served model emits `[C1]`-style citations and refuses. The probe adapter is structurally valid for all of this; its *weights* are 0.41 epochs and must never become v1 or appear in a reported number. `training/.scratch/fused-probe/` already holds a fused 8-bit copy from the memory measurement.
-2. **Then v1**, 2,956 iters, alone. **Then v2**, same schedule, alone.
+Start it with nothing else resident — llama-server is stopped, Postgres is stopped, no fuse or conversion running:
 
-**Why not in parallel — the earlier claim was wrong.** Training peaks at 11.030 GB against the 12.71 GB working set, leaving 1.68 GB. `mlx_lm.fuse` peaks at **3.311 GB** measured; llama-server at Q4_K_M with a 6,528 context needs **~2.1-2.4 GB** (~1.1-1.3 GB weights plus 0.75 GB KV cache, at 0.109 MB per token for 28 layers x 8 KV heads x 128 head_dim x 2 bytes x 2). Either alone is about double the headroom, and the failure mode is not a clean OOM — swap pressure is what produced the `nan` on the first bf16 attempt, so the cost is a corrupted 9-hour run that reads like a numerical bug.
+```bash
+cd /Users/jin/Desktop/Dev/EvalGate
+uv sync --group mlx
+
+nohup caffeinate -is env HF_HUB_OFFLINE=1 \
+  uv run python -m mlx_lm lora --model mlx-community/Qwen3-1.7B-8bit \
+    --train --data training/artifacts/dataset \
+    --max-seq-length 6528 --grad-checkpoint --mask-prompt \
+    --batch-size 1 --grad-accumulation-steps 4 \
+    --num-layers 16 --learning-rate 5e-5 \
+    --iters 2956 --steps-per-eval 200 --val-batches 25 --save-every 200 \
+    --adapter-path training/artifacts/adapters-v1 \
+  > training/artifacts/v1_console.log 2>&1 &
+```
+
+**Nothing else needs to be resident.** The splits are already on disk at `training/artifacts/dataset/` and training reads only those three files plus the HF cache — no Postgres, no network (`HF_HUB_OFFLINE=1` verified). Training peaks at 11.030 GB against a 12.71 GB working set, so the 1.68 GB that remains must stay free: `mlx_lm.fuse` needs 3.311 GB and llama-server ~2.1 GB, and either would push the run into swap, which is what produced the original `nan`. Leave the lid open and stay on mains — `caffeinate -is` blocks idle sleep but not lid-close suspend.
+
+Then **v2**, same schedule, alone. Then re-run the P1.3 pipeline against each selected adapter.
+
+**P1.3, proven and repeatable.** Every stage ran against the probe adapter. Re-run verbatim on `adapters-v1` once v1's checkpoint is selected:
+
+```bash
+brew install llama.cpp                            # arm64 bottle, all binaries Mach-O arm64
+uv run --group mlx python -c "from huggingface_hub import snapshot_download; \
+  snapshot_download('mlx-community/Qwen3-1.7B-8bit')"      # once, with network, for fuse
+
+uv run --group mlx python -m mlx_lm fuse --model mlx-community/Qwen3-1.7B-8bit \
+  --adapter-path training/artifacts/adapters-v1 \
+  --save-path training/.scratch/fused-v1-bf16 --dequantize          # 3.2 GB
+
+cd training/.scratch/llamacpp/llama.cpp-b10210                       # tarball, not a clone
+uv run --no-project --with-requirements requirements/requirements-convert_hf_to_gguf.txt \
+  python convert_hf_to_gguf.py <fused dir> --outfile <out>.f16.gguf --outtype f16   # 3.44 GB
+
+llama-quantize <out>.f16.gguf <out>.Q4_K_M.gguf Q4_K_M               # 1.03 GB, 12.5 s
+llama-server -m <out>.Q4_K_M.gguf -c 8192 --host 127.0.0.1 --port 8080
+```
+
+Sizes: 1.8 GB base → 3.2 GB fused bf16 → 3.44 GB f16 GGUF → **1.03 GB Q4_K_M** (5.12 BPW, a 3.3x reduction). Scratch total 9.4 GB, 579 GB free. **Serving: 84.0 tok/s generation, ~1,000 tok/s prefill, ~4.5 s per real case** — so a 96-case suite is ~7 min of model time.
+
+**Two conversion gotchas, both load-bearing.** The converter pins `numpy~=1.26.4` and `transformers==4.57.6` against the project's numpy 2.5.1 and transformers 5.14.1, so it **must** run under `uv run --no-project --with-requirements` — installing it into the venv would break mlx-lm. And `mlx_lm.fuse` resolves the model with `local_files_only=True` and demands a complete snapshot, so run `snapshot_download` once with network before going offline.
+
+**Why P1.3 is not run in parallel with training — the earlier claim was wrong.** Training peaks at 11.030 GB against the 12.71 GB working set, leaving 1.68 GB. `mlx_lm.fuse` peaks at **3.311 GB** measured; llama-server at Q4_K_M with a 6,528 context needs **~2.1-2.4 GB** (~1.1-1.3 GB weights plus 0.75 GB KV cache, at 0.109 MB per token for 28 layers x 8 KV heads x 128 head_dim x 2 bytes x 2). Either alone is about double the headroom, and the failure mode is not a clean OOM — swap pressure is what produced the `nan` on the first bf16 attempt, so the cost is a corrupted 9-hour run that reads like a numerical bug.
 
 **One network step before going offline.** `mlx_lm.fuse` resolves the model with `local_files_only=True` and demands a *complete* snapshot, while `load()` skips `.gitattributes` and `README.md`. Run `snapshot_download('mlx-community/Qwen3-1.7B-8bit')` once with network; fuse then works offline. Training itself is verified network-free.
 
@@ -194,7 +236,15 @@ Reproduce either number with `train trajectory` (reads the committed `probe_v1_l
 
 **If it dies at hour 3.** `--save-every 200` writes `adapters.safetensors` plus numbered `0000200_adapters.safetensors` checkpoints, all kept. Resume with `--resume-adapter-file <newest numbered> --iters <remaining>`. This is a **warm restart, not an exact continuation**: mlx-lm restores adapter weights only — Adam moments reset to zero, the data iterator reshuffles, the counter starts over. Constant LR is chosen precisely so the schedule is not lost too. mlx-lm never selects a best checkpoint, so choose on val loss.
 
-**What the 600-iter adapter is good for.** It is a **structurally valid, undertrained adapter** — correct shape, correct `adapter_config.json`, and confirmed loadable by `mlx_lm.fuse` (3.6 s, 1.7 GB fused output in `training/.scratch/fused-probe/`). Build the whole P1.3 pipeline against it: fuse → GGUF → Q4_K_M → `llama-server`, and confirm the served model emits `[C1]`-style citations and refuses. What it is **not** good for is any number that goes in a report — 600 iters is 0.41 epochs, no category is exercised enough for a per-category rate to mean anything, and it must never become v1. Build the pipeline against it; throw the weights away. **Correction: this work is sequenced before the long runs, not parallel with them — see the memory numbers above.**
+**The P1.4 endpoint contract, settled but not written.** `ModelClient` is one method — `generate(case: Case) -> str` plus a `ref` string. llama-server exposes an OpenAI-compatible `/v1/chat/completions` returning `choices[0].message.content`, plus `/health`, `/props` and a `timings` block. **The protocol needs no change.** What P1.4 must add:
+
+- A `LlamaServerModel` implementing `ModelClient` — POST at `temperature 0` with `chat_template_kwargs: {"enable_thinking": false}`, and set `ref` to the model version plus quantization so the diff report labels runs.
+- **The real risk: the eval prompt has no shared source of truth with the training prompt.** `to_example()` lives in `evalgate_training.dataset.build` and `evalcore` does not depend on `training`. A client that re-renders from `Case.question` + `Case.context` can drift on a separator or a label and shift every score with no error. Fix at P1.4 by moving the renderer into `evalcore` and importing it from training, or by pinning it with a byte-for-byte fixture test.
+- Serving both versions means **two llama-server processes on different ports** (one model per process); `ref` distinguishes them.
+- Overflow needs no handling: HTTP 400 propagates into `run_case`'s existing per-case error path.
+- Thinking mode: with and without `chat_template_kwargs` both produced no `<think>` block, because the training targets already carry the empty `<think></think>`. Pass it explicitly anyway so the served prompt matches training exactly rather than relying on learned behaviour.
+
+**The probe adapter is discarded.** It did its job: the pipeline ran end to end and the served model emits the trained shape. Three hand checks on **test-split** cases, qualitative only — it produced `[C1][C4][C5]`-style markers on every answer, it refused the adversarial case naming the absent symbol (`EnableSecureScraping`), and its factual answer matched the teacher's chunk content exactly. **None of that is a quality measurement and none of it is in DECISIONS.md as one** — these are 0.41-epoch weights, 4 cases, no per-category meaning. It must never become v1. `training/.scratch/fused-probe*`, `gguf/` and the probe adapters are all disposable; the pipeline, sizes, throughput, context decision and endpoint contract are what carry forward. **Correction: this work is sequenced before the long runs, not parallel with them — see the memory numbers above.**
 
 Then `mlx_lm.fuse`, P1.3 (GGUF + llama.cpp), and P1.4, which is already built against stubs and needs only the runner pointed at a real endpoint. Two questions from the hand review travel into the P1.2 eval and are recorded in section 6: whether fastapi underperforms, and whether comparison refusals exceed the teacher's 36%.
 
@@ -205,6 +255,8 @@ Nothing in P2's remainder blocks P1.2, and P1.2 blocks nothing in P2 except the 
 ## 8. Session log
 
 Newest first. Three to five lines each. What was attempted, what landed, what broke, what the next session needs to know.
+
+**2026-08-03 P1.3 serving pipeline proven end to end against throwaway probe weights.** BUILD_PLAN P1.3 wants GGUF + llama.cpp because MLX cannot run on OCI Ampere — this is the prod path, not a local convenience — plus Q4_K_M, an OpenAI-compatible endpoint, and both versions servable. All of it ran: fuse `--dequantize` → 3.2 GB bf16, `convert_hf_to_gguf.py` → 3.44 GB f16, `llama-quantize` → **1.03 GB Q4_K_M at 5.12 BPW** (3.3x reduction, 12.5 s), served on llama-server. Every brew binary is `Mach-O 64-bit executable arm64`; nothing pulls x86 and nothing runs under Rosetta. **Serving 84.0 tok/s generation, ~1,000 tok/s prefill, ~4.5 s per real case, so a 96-case suite is ~7 min of model time** — the P1.4 budget will be dominated by the judge, not the model. Two conversion traps, both caught before they could do damage: the converter pins numpy 1.26 and transformers 4.57 against the project's 2.5.1 and 5.14.1, so installing it into the venv would have broken mlx-lm on the eve of an 18-hour run — it runs under `uv run --no-project --with-requirements` instead, which also keeps torch out of `uv.lock` and out of CI; and `mlx_lm.fuse` demands a complete HF snapshot, so `snapshot_download` must run once with network before going offline. Settled `-c 8192` for serving: 6528 was a training *sequence* budget covering prompt plus answer, while the prompt alone reaches 6,357 tokens, and a 12,009-token prompt returns a clean **HTTP 400 `exceed_context_size_error` rather than silent truncation**, which is exactly what the harness needs. On P1.4: the `ModelClient` protocol needs no change, but flagged a real latent risk — the eval prompt has no shared source of truth with `to_example()` in the training package, so a re-implemented renderer could drift on a separator and shift every score silently. **The probe adapter and all its artifacts are discarded**; the three hand checks (citation markers present, refusal on the adversarial case, factual answer matching the teacher's chunk) are qualitative shape checks on 4 test-split cases and are deliberately absent from DECISIONS.md as quality numbers.
 
 **2026-08-02 Probe run; 5e-5 confirmed after the pre-committed rule turned out to be defective.** The probe went 125.6 min, 10.1 s/step, peak 11.030 GB, and its 25-batch val trajectory bumped upward at iter 400 (1.1024 → 1.1462 → 0.9761). That bump fired **two clauses of the pre-committed rule at once** — "any eval rises above its predecessor" demanding 2e-5, and "non-monotonic but never above baseline" demanding 1e-4. The clauses were never checked for disjointness; the second is a subset of the first for any curve that drops steeply on its first leg. Logged as a defect, along with the fact that the branch the collision made unavailable was the convenient one, which is the only reason it was safe to repair the rule after seeing the result. Before re-measuring, read the source rather than assuming: `evaluate` passes no `seed` to `iterate_batches`, so batch order comes from the global NumPy RNG that advances through every prior permutation — **each in-training eval scored a different ~18% subsample**, so 200-vs-400 was never a paired comparison. Pre-committed the full-split reading first, with the bands unchanged and made exhaustive and non-overlapping, plus a cap of one re-measurement so this could not become a search for a congenial number. Full split, all 140 rows, deterministic: **5.4749 → 1.0871 → 1.0446 → 1.0056, monotonic, 81.6% drop**. The bump inverts sign. **Branch (2) fired alone: 5e-5 confirmed, 2,956 iters unchanged.** The guard held in the strongest sense — 81.6% clears the 25% bar threefold, so no available choice of threshold changes the verdict. Best evidence for the noise diagnosis: the untrained baseline scores 5.2696 on a subsample and 5.4749 on the full split, a **0.2053 swing on an identical model, 4.7x the 0.0438 anomaly** that nearly bought an 18-hour retry. Also **withdrew the earlier "P1.3 in parallel" claim** — measured `mlx_lm.fuse` at 3.311 GB and llama-server at ~2.1-2.4 GB against 1.68 GB of headroom, so both are sequenced before the long runs; swap pressure is what produced the original `nan`, so the failure would look like a numerical bug rather than an OOM. Found one P1.3 blocker: `fuse` demands a complete HF snapshot and fails offline until `snapshot_download` is run once with network. Checkpoint selection is now pre-committed for both versions, on the full split, identically.
 

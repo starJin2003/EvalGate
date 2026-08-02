@@ -394,6 +394,50 @@ Dropping bf16 → 8-bit saves ~1.6 GB; gradient checkpointing saves ~16 GB. Use
 trains the model to emit unterminated answers rather than to answer from unseen
 chunks. At 4096 that would hit 220 of 1,758 rows (12.5%).
 
+## P1.3 — serving
+
+GGUF plus llama.cpp, because MLX cannot run on OCI Ampere: this is the production
+path, not a local convenience. Pipeline proven end to end 2026-08-03; re-run it
+against each selected adapter.
+
+```bash
+brew install llama.cpp                     # arm64 bottle; every binary is Mach-O arm64
+uv run --group mlx python -c "from huggingface_hub import snapshot_download; \
+  snapshot_download('mlx-community/Qwen3-1.7B-8bit')"   # once, with network — fuse needs
+                                                        # a *complete* snapshot
+uv run --group mlx python -m mlx_lm fuse \
+  --model mlx-community/Qwen3-1.7B-8bit \
+  --adapter-path training/artifacts/adapters-v1 \
+  --save-path training/.scratch/fused-v1-bf16 --dequantize
+
+cd training/.scratch/llamacpp/llama.cpp-b10210
+uv run --no-project --with-requirements requirements/requirements-convert_hf_to_gguf.txt \
+  python convert_hf_to_gguf.py <fused dir> --outfile <out>.f16.gguf --outtype f16
+
+llama-quantize <out>.f16.gguf <out>.Q4_K_M.gguf Q4_K_M
+llama-server -m <out>.Q4_K_M.gguf -c 8192 --host 127.0.0.1 --port 8080
+```
+
+| stage | size |
+|---|---|
+| MLX 8-bit base | 1.8 GB |
+| fused bf16 (`--dequantize`) | 3.2 GB |
+| GGUF f16 | 3.44 GB |
+| **Q4_K_M** | **1.03 GB** (5.12 BPW, 3.3x reduction) |
+
+**Measured on an M1 Pro:** 84.0 tok/s generation, ~1,000 tok/s prefill, ~4.5 s for a
+real case (~2,900-token prompt), so a 96-case suite is ~7 minutes of model time.
+
+**The converter never goes in the project venv.** It pins `numpy~=1.26.4` and
+`transformers==4.57.6`; the project runs numpy 2.5.1 and transformers 5.14.1 for
+mlx-lm. `uv run --no-project --with-requirements` uses the pinned set once and
+leaves nothing behind — which also keeps torch out of `uv.lock` and out of CI.
+
+**Context is `-c 8192`, not 6528.** 6528 was the training *sequence* budget, prompt
+plus answer; at serve time the prompt alone reaches 6,357 tokens. A prompt over the
+limit returns HTTP 400 `exceed_context_size_error` naming both counts — it fails
+loudly rather than truncating silently, which is what the harness needs.
+
 ## The gate (P1.4 + P3)
 
 The harness is built against a stubbed model, so the whole merge-blocking path is
