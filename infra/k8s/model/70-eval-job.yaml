@@ -1,0 +1,95 @@
+# The 96-case suite, run against the in-cluster model server.
+#
+# A Job in the cluster rather than the CLI on the workstation, for three reasons:
+# the Mac is occupied by a ~8 h training run and must stay untouched; a ~2.5 h
+# kubectl port-forward is a fragile thing to bet a 2.5 h measurement on; and this
+# is the exact call path P3's daily DAG will use, so it doubles as that DAG's
+# rehearsal.
+#
+# Uses the API image, which already carries evalcore and therefore the
+# `evalgate-eval` console script -- verified present at /app/.venv/bin before this
+# manifest was written. No new image, and the harness that runs here is the same
+# build the gate runs.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: evalgate-eval-oci
+  namespace: evalgate
+  labels:
+    app.kubernetes.io/name: evalgate-eval-oci
+    app.kubernetes.io/part-of: evalgate
+spec:
+  # No retries. A 2.5-hour job that silently re-runs on failure would burn five
+  # hours and leave two partial artifacts; the failure should be inspected.
+  backoffLimit: 0
+  # 4 h against a ~2.5 h expectation. Sized on the MEASURED 81-92 s/case from the
+  # shipped -t 3 config, not on the stale 40-60 min estimate that predates any
+  # measurement on this node.
+  activeDeadlineSeconds: 14400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: evalgate-eval-oci
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+      containers:
+        - name: eval
+          image: evalgate-api:0.1.0
+          imagePullPolicy: IfNotPresent
+          command: ["/app/.venv/bin/evalgate-eval"]
+          args:
+            - run
+            - --suite
+            - /eval/suite.json
+            - --out
+            - /eval/run_v1_iter2000_oci.json
+            - --server-url
+            - http://evalgate-model.evalgate.svc.cluster.local:8080
+            # Must match the local baseline exactly. `run_v1_iter2000.json` was
+            # produced with these, and model_ref lands in the artifact.
+            - --model-version
+            - v1-iter2000
+            - --quantization
+            - Q4_K_M
+            - --run-id
+            - v1-iter2000-oci
+            # NOT optional for the comparison. The local run carries a `judge`
+            # scorer per case (StubJudge, deterministic, no priced call). Omitting
+            # it here would drop a scorer from every case and change the suite
+            # score for a reason that has nothing to do with the hardware.
+            - --judge
+            # The 180s default is sized for Metal. The longest prompt is ~7.1k
+            # tokens at ~36 tok/s prefill, so a slow case can pass 180s and be
+            # recorded as a per-case error indistinguishable from a real failure.
+            - --timeout-s
+            - "900"
+          volumeMounts:
+            - name: eval
+              mountPath: /eval
+              subPath: eval
+          resources:
+            # This container waits on HTTP and scores JSON; the work is in the
+            # model server's cgroup, not here. Kept small so it does not compete
+            # with the thing it is measuring.
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        # Same PVC the model server uses, mounted read-WRITE here because the run
+        # artifact is written back to it. RWO permits this: it constrains a volume
+        # to one node, not one pod, and there is one node.
+        - name: eval
+          persistentVolumeClaim:
+            claimName: evalgate-models
