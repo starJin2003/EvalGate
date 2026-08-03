@@ -60,6 +60,16 @@ kubectl apply -f "${HERE}/10-deployment.yaml"
 kubectl apply -f "${HERE}/20-service.yaml"
 kubectl apply -f "${HERE}/30-ingress.yaml"
 
+# Only meaningful once kube-prometheus-stack has installed the CRD. Applying it
+# unconditionally would make the API undeployable on a cluster without
+# monitoring, which is the wrong dependency direction.
+if kubectl get crd servicemonitors.monitoring.coreos.com >/dev/null 2>&1; then
+  log "ServiceMonitor CRD present; applying the scrape config."
+  kubectl apply -f "${HERE}/40-servicemonitor.yaml"
+else
+  log "ServiceMonitor CRD absent; skipping (install kube-prometheus-stack first)."
+fi
+
 log "Waiting for the rollout (up to 5 minutes)."
 kubectl -n "$NS" rollout status deployment/evalgate-api --timeout=300s
 

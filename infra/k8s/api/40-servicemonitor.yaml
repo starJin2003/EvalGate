@@ -1,0 +1,29 @@
+# Tells the Prometheus operator to scrape the API. Applied separately from the
+# rest of the API stack because it depends on the ServiceMonitor CRD, which only
+# exists once kube-prometheus-stack is installed — infra/k8s/api/apply.sh skips
+# this file when the CRD is absent so the API can still deploy on a bare cluster.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: evalgate-api
+  namespace: evalgate
+  labels:
+    app.kubernetes.io/name: evalgate-api
+    app.kubernetes.io/part-of: evalgate
+    # The Prometheus instance selects ServiceMonitors carrying this label. Set
+    # explicitly in values.yaml rather than relying on the chart's default
+    # release-name selector, which silently matches nothing if the release is
+    # ever renamed.
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames: [evalgate]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: evalgate-api
+  endpoints:
+    - port: metrics
+      path: /metrics
+      # Matches the global 15s. Stated here so the API's resolution does not
+      # silently change if the global interval is ever raised.
+      interval: 15s

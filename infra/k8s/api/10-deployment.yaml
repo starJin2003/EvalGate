@@ -37,7 +37,15 @@ spec:
           ports:
             - name: http
               containerPort: 8000
+            # Metrics deliberately on their own port. The Ingress maps :80 to
+            # `http` only, so /metrics — which publishes route names, request
+            # counts, and error rates — is unreachable from the internet while
+            # staying trivially scrapeable from inside the cluster.
+            - name: metrics
+              containerPort: 9000
           env:
+            - name: METRICS_PORT
+              value: "9000"
             # Individually, via secretKeyRef, rather than the envFrom block
             # Postgres uses. This is load-bearing: k8s `$(VAR)` expansion only
             # sees variables defined earlier in this same list, and variables

@@ -1,0 +1,227 @@
+# kube-prometheus-stack on a single 4 OCPU / 24 GB k3s node.
+#
+# Chart defaults assume a multi-node cluster with room to spare and set NO
+# resources at all on Prometheus itself. This node has to hold Postgres, the
+# API, monitoring, then Airflow in P3 and Kafka in P4, so every component here
+# is sized explicitly and several are switched off entirely.
+#
+# Budget as configured: 672Mi / 390m of requests, 1.6Gi / 1.6 CPU of limits.
+# Against 23,975Mi allocatable that is 2.8% of memory requests, leaving ~22Gi
+# unrequested for Airflow and Kafka.
+
+fullnameOverride: monitoring
+
+# --- switched off -------------------------------------------------------------
+
+# k3s runs the controller manager, scheduler, proxy, and etcd inside the single
+# k3s process rather than as separate pods exposing the metrics ports these
+# ServiceMonitors expect. Left enabled they produce permanently `down` targets,
+# which is worse than no target at all: it teaches you to ignore the target list.
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false
+kubeEtcd:
+  enabled: false
+
+# This one genuinely works on k3s, so it is a real trade rather than a
+# compatibility fix. apiserver_request_duration_seconds_bucket is the single
+# largest cardinality source in the whole stack — comparable to everything else
+# combined — and it feeds none of the three things this deployment needs: API
+# latency, node resources, pod health. Re-enable if control-plane visibility is
+# ever wanted; it is a one-line change and costs roughly double the Prometheus
+# memory budget.
+kubeApiServer:
+  enabled: false
+
+# --- and the part the toggles above do NOT do ---------------------------------
+#
+# Measured 2026-08-03: with kubeApiServer and kubeEtcd both disabled above,
+# Prometheus still held 53,201 active series, 44,260 of them on the `kubelet`
+# job, and the ten largest metrics by series were apiserver_*, etcd_*, and
+# workqueue_* histograms.
+#
+# Because k3s runs the apiserver, etcd, controller manager, and kubelet inside
+# ONE process, that process's /metrics exposes all of them — so the chart's
+# component toggles only remove the separate scrape *jobs*, not the series. The
+# metrics arrive through the kubelet scrape regardless.
+#
+# Dropping them here is what actually enforces the decision recorded above. What
+# stays is everything the dashboards need: kubelet_*, container_* (cadvisor),
+# machine_*, node_*, and the API's own metrics.
+kubelet:
+  serviceMonitor:
+    metricRelabelings:
+      - sourceLabels: [__name__]
+        regex: "(apiserver|etcd|workqueue|apiextensions_apiserver|aggregator|authentication|authorization)_.*"
+        action: drop
+
+# No receiver is configured and no notification channel is in budget: email or
+# Slack would both be new external services. An Alertmanager that notifies
+# nobody is the appearance of monitoring without the substance, so it and the
+# rules that would feed it are both off. P3 can wire it up alongside a real
+# receiver when the daily DAG has something worth paging about.
+alertmanager:
+  enabled: false
+defaultRules:
+  create: false
+
+windowsMonitoring:
+  enabled: false
+
+# --- prometheus ---------------------------------------------------------------
+prometheus:
+  # ClusterIP. Reached over the SSH tunnel, like everything else administrative.
+  service:
+    type: ClusterIP
+  prometheusSpec:
+    # 15s rather than the chart's 30s. k6 runs for minutes, and at 30s a load
+    # spike is four data points — not enough to read a p95 curve off. This
+    # doubles storage, which is why the size cap below is set explicitly.
+    scrapeInterval: 15s
+    evaluationInterval: 30s
+
+    # Retention is bounded twice, by age and by size, whichever comes first.
+    #
+    # Arithmetic behind 8GB: roughly 20k active series (cadvisor over ~14 pods,
+    # node-exporter, kube-state-metrics, the API, Prometheus itself) at 15s is
+    # 5,760 samples/series/day at ~2 bytes compressed, so ~230 MB/day and ~3.5 GB
+    # at 15 days. The cap is ~2x that, so it bounds a cardinality surprise
+    # without truncating normal operation.
+    retention: 15d
+    retentionSize: 8GB
+
+    # local-path on the 42 GB boot volume, NOT the Postgres block volume.
+    # Metrics are regenerable; the database is not. The remaining 100 GB of free
+    # block-storage allowance is better kept for P4.
+    #
+    # IMPORTANT: local-path does not enforce PVC capacity — it is a hostPath
+    # bind with no quota, so this 10Gi is advisory and would not stop Prometheus
+    # filling the boot disk. `retentionSize` above is the only real guard.
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi
+
+    # Watch every namespace and select on an explicit label rather than the
+    # chart's default "same release name" rule, which silently matches nothing
+    # if the release is ever renamed.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+
+    resources:
+      requests:
+        cpu: 200m
+        memory: 400Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+
+# --- grafana ------------------------------------------------------------------
+grafana:
+  enabled: true
+  # ClusterIP, reached by port-forward over the existing SSH tunnel. There is no
+  # TLS on this node — Let's Encrypt will not issue for a bare IP — so a public
+  # Grafana would mean a full admin login crossing the internet in cleartext,
+  # which is a strictly worse exposure than the API's scoped bearer token.
+  service:
+    type: ClusterIP
+  ingress:
+    enabled: false
+
+  # Created out-of-band, same rule as the Postgres password and the API token:
+  # this repository is public, so a credential in a values file is a credential
+  # in every fork of it, permanently.
+  admin:
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+
+  # Stateless. Dashboards arrive from a ConfigMap, so a PVC would persist
+  # nothing but session state.
+  persistence:
+    enabled: false
+
+  # Picks up any ConfigMap labelled grafana_dashboard=1, which is how the
+  # committed JSON under dashboards/ gets in without being pasted into a chart
+  # value.
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
+    datasources:
+      enabled: true
+    # The chart ships these two sidecars with NO resources at all, and measured
+    # 2026-08-03 they were 73Mi each — more than half the Grafana container
+    # itself. Unbounded is exactly what this file exists to prevent.
+    resources:
+      requests:
+        cpu: 10m
+        memory: 48Mi
+      limits:
+        cpu: 50m
+        memory: 96Mi
+
+  # Off. The bundled dashboards split into two groups on this cluster: the
+  # control-plane ones (apiserver, etcd, scheduler, proxy) render permanently
+  # empty because those scrapes are deliberately disabled above, and the rest
+  # duplicate what the committed dashboard covers. An empty dashboard teaches a
+  # reader to distrust the dashboards, for the same reason a permanently `down`
+  # target teaches them to ignore the target list.
+  defaultDashboardsEnabled: false
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 200m
+      # Measured at 189Mi with the default dashboards loaded, against a 256Mi
+      # ceiling — closer than is comfortable. 320Mi after dropping them.
+      memory: 320Mi
+
+# --- exporters ----------------------------------------------------------------
+prometheus-node-exporter:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 32Mi
+    limits:
+      cpu: 100m
+      memory: 64Mi
+
+kube-state-metrics:
+  resources:
+    requests:
+      cpu: 20m
+      memory: 48Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# --- operator -----------------------------------------------------------------
+prometheusOperator:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  prometheusConfigReloader:
+    resources:
+      requests:
+        cpu: 10m
+        memory: 16Mi
+      limits:
+        cpu: 50m
+        memory: 32Mi

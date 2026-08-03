@@ -14,3 +14,8 @@ spec:
     - name: http
       port: 80
       targetPort: http
+    # Scraped by the ServiceMonitor. Not referenced by the Ingress, so it has no
+    # path from the internet.
+    - name: metrics
+      port: 9000
+      targetPort: metrics

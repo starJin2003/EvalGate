@@ -7,8 +7,8 @@ Lands across P2 and P3.
 |---|---|
 | `postgres/` | **Live as of 2026-08-03.** Postgres 16.14 + pgvector 0.8.6 on a dedicated OCI block volume |
 | `api/` | **Live as of 2026-08-03.** 2 replicas, Postgres-backed, public on port 80 via traefik |
+| `monitoring/` | **Live as of 2026-08-03.** kube-prometheus-stack 88.1.3, 5 pods, 592 Mi, committed dashboard |
 | model server | Not built yet (P2) |
-| kube-prometheus-stack | Not built yet (P2) |
 | airflow | Not built yet (P3) |
 
 ---
@@ -300,6 +300,144 @@ for p in $(kubectl -n evalgate get pods -l app.kubernetes.io/name=evalgate-api \
     "import json,urllib.request;print(json.load(urllib.request.urlopen('http://127.0.0.1:8000/suites')))"
 done
 ```
+
+---
+
+## monitoring/
+
+kube-prometheus-stack 88.1.3 (operator v0.93.0) on a 4 OCPU / 24 GB node that
+also has to hold Airflow in P3 and Kafka in P4.
+
+| File | What it is |
+|---|---|
+| `node-helm-setup.sh` | One-time: installs helm 3.21.3 on the node |
+| `values.yaml` | Every component sized explicitly; five subcharts disabled |
+| `dashboards/evalgate.json` | The committed dashboard, 13 panels across 3 rows |
+| `apply.sh` | Runs helm on the node, then loads the dashboard ConfigMap |
+
+```bash
+scp -i ~/.ssh/evalgate_ed25519 infra/k8s/monitoring/node-helm-setup.sh ubuntu@<node-ip>:/tmp/
+ssh -i ~/.ssh/evalgate_ed25519 ubuntu@<node-ip> 'sudo bash /tmp/node-helm-setup.sh'
+
+export KUBECONFIG=~/.kube/evalgate.yaml
+kubectl create namespace monitoring
+kubectl -n monitoring create secret generic grafana-admin \
+  --from-literal=admin-user=admin \
+  --from-literal=admin-password="$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)"
+
+EVALGATE_NODE_SSH="ssh -i ~/.ssh/evalgate_ed25519 ubuntu@<node-ip>" \
+  ./infra/k8s/monitoring/apply.sh
+```
+
+helm 3, **not** 4 — kube-prometheus-stack and the P3 Airflow chart are tested
+against 3, and a node that cannot be rebuilt is the wrong place to find out which
+hooks helm 4 changed. It runs on the node for the same reason the image build
+does; release state lives in-cluster as secrets, so the client's location does
+not affect the result.
+
+### Sizing
+
+Chart defaults set **no resources at all** on Prometheus, and none on Grafana's
+two sidecars. Every container is sized in `values.yaml`.
+
+| Component | Requests | Limits | Measured |
+|---|---|---|---|
+| Prometheus | 400Mi / 200m | 1Gi / 1 | 223Mi |
+| Grafana | 128Mi / 100m | 320Mi / 200m | 167Mi |
+| Grafana sidecars (×2) | 48Mi / 10m | 96Mi / 50m | 72Mi each |
+| kube-state-metrics | 48Mi / 20m | 128Mi / 100m | 20Mi |
+| node-exporter | 32Mi / 20m | 64Mi / 100m | 9Mi |
+| operator + config-reloader | 80Mi / 60m | 160Mi / 250m | 28Mi |
+| **Total** | **784Mi** | **~1.8Gi** | **592Mi** |
+
+That is 8% of the node's memory requests with everything else running, leaving
+roughly 22 GB for Airflow and Kafka. **Memory is not the constraint on this node;
+CPU is** — 4 OCPU, already 143% committed in limits.
+
+**Watch `grafana.sidecar.resources`, not just `grafana.resources`.** Sizing the
+Grafana container alone leaves two thirds of the pod unbounded, and
+`kubectl top pods` reports the pod total, so it reads as if the Grafana limit
+were being exceeded. Use `--containers`.
+
+### What is disabled, and the part disabling does not do
+
+`kubeControllerManager`, `kubeScheduler`, `kubeProxy`, `kubeEtcd`, `kubeApiServer`,
+`alertmanager`, `defaultRules`, and Grafana's bundled dashboards are all off.
+Reasons are in DECISIONS.md; the short version is that the first four would be
+permanently `down` targets on k3s, `kubeApiServer` is the largest cardinality
+source and feeds nothing here, and an Alertmanager with no receiver is the
+appearance of monitoring rather than the substance.
+
+**Disabling those subcharts does not remove their metrics on k3s.** k3s runs the
+apiserver, etcd, controller manager, and kubelet in a single process, and that
+process's `/metrics` serves all of them — so the toggles remove the separate
+scrape *jobs* while the series keep arriving through the `kubelet` scrape. Left
+alone, that was **44,260 of 53,201 active series**. What actually enforces the
+decision is:
+
+```yaml
+kubelet:
+  serviceMonitor:
+    metricRelabelings:
+      - sourceLabels: [__name__]
+        regex: "(apiserver|etcd|workqueue|apiextensions_apiserver|aggregator|authentication|authorization)_.*"
+        action: drop
+```
+
+which took total ingest to **16,192 series**. cadvisor is scraped from a
+different endpoint with its own relabel list and is untouched.
+
+### Retention and storage
+
+`retention: 15d` **and** `retentionSize: 8GB`, on `local-path` over the boot
+volume — not the Postgres block volume, because metrics are regenerable and the
+remaining free block allowance is worth keeping for P4.
+
+**`retentionSize` is the only real guard.** local-path is a hostPath bind with no
+quota, so the `10Gi` PVC is advisory and would not stop Prometheus filling the
+boot disk.
+
+Scrape interval is 15s rather than the chart's 30s: k6 runs for minutes, and at
+30s a load spike is four data points. Measured 1,582 samples/s → ~273 MB/day →
+~4.1 GB at 15 days.
+
+### The dashboard
+
+`dashboards/evalgate.json` is the committed artifact. `apply.sh` generates a
+ConfigMap from it labelled `grafana_dashboard=1`, which the Grafana sidecar
+watches — so the file on disk stays the single source rather than being pasted
+into a chart value.
+
+Panels are grouped as **EvalGate API** (request rate, p95 latency, 5xx rate,
+status classes, requests in flight), **Node** (CPU, RAM, disk split by mountpoint,
+load average — this row is what P2's Record list asks for), and **Cluster**
+(container memory as a percentage of its limit, container restarts).
+
+Queries use a `datasource` template variable rather than a hard-coded UID, so the
+dashboard imports cleanly regardless of what the provisioned datasource is named.
+
+### Verifying
+
+```bash
+kubectl -n monitoring port-forward svc/monitoring-prometheus 9090:9090
+curl -s 'http://127.0.0.1:9090/api/v1/targets?state=active' \
+  | python3 -c "import json,sys;[print(t['health'], t['labels'].get('job')) for t in json.load(sys.stdin)['data']['activeTargets']]"
+
+curl -s --get http://127.0.0.1:9090/api/v1/query \
+  --data-urlencode 'query=sum by (handler) (rate(http_requests_total{job="evalgate-api"}[5m]))'
+```
+
+Grafana:
+
+```bash
+kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80
+kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d; echo
+# then http://localhost:3000, dashboard uid evalgate-p2
+```
+
+When judging cardinality, use the per-job series count rather than
+`prometheus_tsdb_head_series` — head keeps stale series for up to two hours after
+a relabel change, so it lags by design.
 
 ---
 

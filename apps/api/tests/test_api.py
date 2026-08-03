@@ -105,6 +105,49 @@ def test_ready_is_503_when_the_store_cannot_be_reached(suite) -> None:
     assert c.get("/health").status_code == 200
 
 
+# --- metrics ------------------------------------------------------------------
+def _metric_names(app) -> set[str]:
+    from prometheus_client import generate_latest
+
+    text = generate_latest(app.state.metrics_registry).decode()
+    return {ln.split("{")[0].split(" ")[0] for ln in text.splitlines() if not ln.startswith("#")}
+
+
+def test_metrics_land_in_the_app_registry_not_the_global_one(client, suite) -> None:
+    client.get("/health")
+    names = _metric_names(client.app)
+    assert any(n.startswith("http_requests_total") for n in names)
+    assert any(n.startswith("http_request_duration_seconds") for n in names)
+    assert any(n.startswith("http_requests_inprogress") for n in names)
+
+
+def test_two_apps_do_not_collide_in_the_registry(suite) -> None:
+    """The library's own in-progress gauge ignores the custom registry and lands
+    in the global default, so a second app raises DuplicateTimeseries. Ours does
+    not, and this is the test that catches a regression back to theirs."""
+    a = TestClient(create_app(MemoryStore(), write_token=TOKEN))
+    b = TestClient(create_app(MemoryStore(), write_token=TOKEN))
+    a.get("/health")
+    b.get("/health")
+    assert a.app.state.metrics_registry is not b.app.state.metrics_registry
+
+
+def test_requests_are_labelled_by_route_template_not_raw_path(client, suite) -> None:
+    """Cardinality guard. Labelling by path would make every suite id a series."""
+    from prometheus_client import generate_latest
+
+    client.get("/suites/s1")
+    client.get("/suites/ghost")
+    text = generate_latest(client.app.state.metrics_registry).decode()
+    assert "/suites/{suite_id}" in text
+    assert "/suites/ghost" not in text
+
+
+def test_metrics_are_not_served_on_the_public_app(client) -> None:
+    """/metrics lives on its own port, so the Ingress cannot reach it."""
+    assert client.get("/metrics").status_code == 404
+
+
 # --- write authentication -----------------------------------------------------
 def test_writes_require_a_bearer_token(suite) -> None:
     c = TestClient(create_app(MemoryStore(), write_token=TOKEN))

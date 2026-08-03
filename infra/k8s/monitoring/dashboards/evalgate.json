@@ -1,0 +1,404 @@
+{
+  "title": "EvalGate",
+  "uid": "evalgate-p2",
+  "tags": ["evalgate", "p2"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "label": "Data source",
+        "type": "datasource",
+        "query": "prometheus",
+        "hide": 0,
+        "refresh": 1,
+        "current": {}
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "EvalGate API",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Request rate by endpoint",
+      "description": "Labelled by route template, not raw path, so a suite id can never become its own series.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 10, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum by (handler) (rate(http_requests_total{job=\"evalgate-api\"}[5m]))",
+          "legendFormat": "{{handler}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "p95 latency by endpoint",
+      "description": "histogram_quantile over the route-labelled duration histogram.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "histogram_quantile(0.95, sum by (le, handler) (rate(http_request_duration_seconds_bucket{job=\"evalgate-api\"}[5m])))",
+          "legendFormat": "{{handler}}"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Error rate (5xx)",
+      "description": "Share of responses that are 5xx. The instrumentator groups status into 2xx/4xx/5xx, which keeps this cheap.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "100 * (sum(rate(http_requests_total{job=\"evalgate-api\",status=\"5xx\"}[5m])) or vector(0)) / clamp_min(sum(rate(http_requests_total{job=\"evalgate-api\"}[5m])), 0.0001)"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Responses by status class",
+      "description": "4xx separated from 5xx: the gate returns 401 by design, and that must not read as an outage.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 6, "y": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 20, "stacking": { "mode": "normal" }, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum by (status) (rate(http_requests_total{job=\"evalgate-api\"}[5m]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Requests in flight",
+      "description": "Saturation rather than throughput. Under k6 this is what shows the API queueing.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 9 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 20, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum(http_requests_inprogress{job=\"evalgate-api\"})",
+          "legendFormat": "in flight"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Node — CPU and RAM at idle vs under load (P2 Record list)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Node CPU now",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 6, "w": 4, "x": 0, "y": 18 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Node RAM now",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 6, "w": 4, "x": 4, "y": 18 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 75 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "colorMode": "value", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes))"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Node CPU utilisation",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 18 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 15, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "100 - (avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
+          "legendFormat": "busy %"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "100 * (avg(rate(node_cpu_seconds_total{mode=\"iowait\"}[5m])))",
+          "legendFormat": "iowait %"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Node memory used",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 18 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 15, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes",
+          "legendFormat": "used"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "node_memory_MemTotal_bytes",
+          "legendFormat": "total"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Disk used — boot volume vs Postgres block volume",
+      "description": "The two are separate on purpose: / carries images and the Prometheus TSDB, /mnt/pgdata carries the database. Watching them apart is what makes the split visible.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 24 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 15, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "node_filesystem_size_bytes{mountpoint=~\"/|/mnt/pgdata\",fstype!~\"tmpfs|overlay\"} - node_filesystem_avail_bytes{mountpoint=~\"/|/mnt/pgdata\",fstype!~\"tmpfs|overlay\"}",
+          "legendFormat": "{{mountpoint}} used"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "node_filesystem_size_bytes{mountpoint=~\"/|/mnt/pgdata\",fstype!~\"tmpfs|overlay\"}",
+          "legendFormat": "{{mountpoint}} total"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Load average",
+      "description": "4 OCPU, so load above 4 means queueing. CPU is the scarcer resource on this node, not memory.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 24 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 4 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "node_load1", "legendFormat": "1m" },
+        { "refId": "B", "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "node_load5", "legendFormat": "5m" },
+        { "refId": "C", "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "node_load15", "legendFormat": "15m" }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Cluster",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "Container memory as % of its limit",
+      "description": "The panel that says whether the sizing in values.yaml was right. Anything approaching 100% is about to be OOMKilled.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 80 },
+              { "color": "red", "value": 95 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "100 * sum by (namespace, pod, container) (container_memory_working_set_bytes{namespace=~\"evalgate|monitoring\",container!=\"\"}) / sum by (namespace, pod, container) (kube_pod_container_resource_limits{namespace=~\"evalgate|monitoring\",resource=\"memory\"})",
+          "legendFormat": "{{namespace}}/{{container}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Container restarts",
+      "description": "A rising line here is a crashloop. Flat at zero is the expected reading.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 0, "showPoints": "auto" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum by (namespace, pod) (kube_pod_container_status_restarts_total{namespace=~\"evalgate|monitoring\"})",
+          "legendFormat": "{{namespace}}/{{pod}}"
+        }
+      ]
+    }
+  ]
+}

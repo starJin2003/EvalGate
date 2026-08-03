@@ -10,6 +10,11 @@ dependencies = [
     # pays a fresh connection handshake, which would make P2's k6 p95 a
     # measurement of connection setup rather than of the API.
     "psycopg[binary,pool]>=3.2",
+    # Route-template labelling is the reason this is a dependency rather than
+    # ~40 lines of middleware. Labelling by raw path would make every distinct
+    # suite id its own label value, which is how a 400Mi Prometheus becomes a
+    # 4 GB one. Pure Python; it and prometheus_client together are <250 KB.
+    "prometheus-fastapi-instrumentator>=7.0",
     "pydantic>=2.9",
     "uvicorn>=0.32",
 ]

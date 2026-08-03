@@ -680,6 +680,56 @@ read back **identically from both replicas individually**, which an in-memory
 store could not do, then read back again over public HTTP after every API pod was
 deleted.
 
+### Monitoring, and what chart defaults would have cost
+
+kube-prometheus-stack 88.1.3 runs on the same node, sized for a box that must
+also hold Airflow in P3 and Kafka in P4. Every container gets explicit requests
+and limits, because the chart sets **none at all** on Prometheus and none on
+Grafana's two sidecars.
+
+```bash
+ssh -i ~/.ssh/evalgate_ed25519 ubuntu@<node-ip> 'sudo bash /tmp/node-helm-setup.sh'
+EVALGATE_NODE_SSH="ssh -i ~/.ssh/evalgate_ed25519 ubuntu@<node-ip>" \
+  ./infra/k8s/monitoring/apply.sh          # helm runs on the node, 84 s
+```
+
+Result: **592 MiB actual against 784 MiB requested**, 5 pods, no Alertmanager.
+Node-wide that is 8% of memory requests — which is the useful finding, because it
+says memory is *not* the binding constraint on the still-open Kafka sizing
+question. CPU is: 4 OCPU, already 143% committed in limits.
+
+**The instructive part was that switching subcharts off did not switch their
+metrics off.** With `kubeApiServer` and `kubeEtcd` disabled, Prometheus still held
+53,201 series and the ten largest metrics were `apiserver_*` and `etcd_*`
+histograms — because k3s runs the apiserver, etcd, controller manager, and
+kubelet in **one process**, whose `/metrics` serves all of them. The chart toggles
+remove the separate scrape jobs; the series arrive through the kubelet scrape
+regardless. A `metricRelabelings` drop on the kubelet ServiceMonitor is what
+actually enforced the decision, taking ingest to **16,192 series** and the kubelet
+job from 44,260 to 7,517.
+
+Prometheus keeps 15 days **and** at most 8 GB on `local-path` over the boot
+volume, not the Postgres block volume — metrics are regenerable and the block
+allowance is worth keeping for P4. The size cap matters more than it looks:
+local-path is a hostPath bind with no quota, so the PVC's declared capacity is
+advisory and `retentionSize` is the only thing that actually stops the TSDB
+filling the disk.
+
+The API exposes Prometheus metrics on **port 9000**, which the Ingress does not
+route — `/metrics` returns 404 from the internet and `up` to the ServiceMonitor.
+Metrics are labelled by route template (`/suites/{suite_id}`), so a suite id can
+never become its own time series.
+
+`infra/k8s/monitoring/dashboards/evalgate.json` is committed: 13 panels over
+request rate, p95 latency, 5xx rate, requests in flight, node CPU/RAM/disk/load,
+and container memory against its limit. Every panel query was executed against
+the Prometheus API before the dashboard was called done — there are no empty
+panels. Grafana stays ClusterIP behind the SSH tunnel: there is no TLS on a bare
+IP, and an admin login crossing the internet in cleartext is a worse trade than
+the API's scoped write token.
+
+Full runbook in [infra/k8s/README.md](infra/k8s/README.md).
+
 ## Repo layout
 
 | Path | What lives here | Phase |

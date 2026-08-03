@@ -4,7 +4,7 @@ Current state of EvalGate. Read this first in every session. Update it before en
 
 Three files, three jobs. BUILD_PLAN.md is the plan and rarely changes. DECISIONS.md is an append only log of rationale and measurements. This file is mutable current state and gets overwritten freely.
 
-Last updated 2026-08-03, while v1 was training. Last change: `apps/api` deployed to k3s, Postgres-backed and public at `http://64.181.195.241` (P2).
+Last updated 2026-08-03, while v1 was training. Last change: kube-prometheus-stack deployed with a committed 13-panel dashboard, and `apps/api` instrumented on a private metrics port (P2).
 
 ---
 
@@ -21,7 +21,7 @@ Last updated 2026-08-03, while v1 was training. Last change: `apps/api` deployed
 | P1.2 Training | **v1 RUNNING since 2026-08-02 18:00**, 2,956 iters at 5e-5, seq 6528 + grad-checkpoint, ETA ~04:20. Probe confirmed the LR (full-split val 5.4749 → 1.0056, 81.6% drop). **v2 deliberately deferred** until the harness is verified end to end against v1 |
 | P1.3 Serving | **Pipeline proven 2026-08-03 against throwaway probe weights.** fuse → GGUF f16 → Q4_K_M (1.03 GB) → llama-server, arm64 native, 84 tok/s. Re-run against v1 when it exists |
 | P1.4 Harness | **Code landed 2026-08-03 at `66cc2e6`, 194 tests passing.** *Verified:* `LlamaServerModel` speaks the protocol against a fake server built from real captured payloads; prompt renderer unified into `evalcore.prompt` and proven byte-identical. *Not verified:* anything against a live server — no real tokenization, no context arithmetic, no judge call. Judge model now decided (gpt-5.4-mini) but **never invoked** |
-| P2 Infra | **Provisioning done 2026-08-02. Postgres + API deployed 2026-08-03.** Postgres on a dedicated 50 GB block volume; the API is public at `http://64.181.195.241`, Postgres-backed, 2 replicas. Model server, monitoring, and k6 still not started |
+| P2 Infra | **Provisioning done 2026-08-02. Postgres, API, and monitoring deployed 2026-08-03.** Postgres on a 50 GB block volume; API public at `http://64.181.195.241`; kube-prometheus-stack live with a committed dashboard, 13 panels, all populated. **Only the model server and k6 remain** |
 | P3 Automation | Gate workflow and threshold logic scaffolded 2026-08-01 |
 | P4 Ingestion | Not started |
 | P5 Analytics | Not started |
@@ -37,8 +37,8 @@ four build items:
 | Deploy **Postgres** with a block volume PVC | **Done 2026-08-03** |
 | Deploy the **api** onto k3s | **Done 2026-08-03.** Public on port 80 via traefik, Postgres-backed, 2 replicas |
 | Deploy the **quantized model server** onto k3s | Not started. Blocked on v1 finishing and the P1.3 pipeline re-running against real weights |
-| kube-prometheus-stack + `/metrics` on FastAPI + committed dashboard JSON | Not started |
-| k6 script, run and recorded | Not started |
+| kube-prometheus-stack + `/metrics` on FastAPI + committed dashboard JSON | **Done 2026-08-03.** Chart 88.1.3, 5 pods, 592 Mi actual. 13-panel dashboard committed and verified populated |
+| k6 script, run and recorded | Not started. The dashboard's node CPU/RAM panels exist specifically to capture the under-load half |
 
 **The "running public API" clause of the exit criterion now holds.**
 `http://64.181.195.241` answers `/health`, `/ready`, `/suites`, `/runs`,
@@ -106,6 +106,14 @@ Fill this in as artifacts land. A new session should be able to read this sectio
 - **Two secrets, both created out-of-band and neither in the repo**: `postgres-credentials` and `evalgate-api-token`. The API composes `DATABASE_URL` in the manifest from three individual `secretKeyRef` env vars — **not `envFrom`**, because k8s `$(VAR)` expansion cannot see variables injected that way
 - **Writes are token-guarded, reads are open.** `PUT /suites`, `POST /runs`, `POST /baseline` need `Authorization: Bearer $EVALGATE_API_TOKEN`; `/health`, `/ready`, reads, and `/gate` do not. With no token configured writes return **503, not open access**
 - **`evalgate_test` is a throwaway database on the same server** for the Postgres store tests, which `TRUNCATE` on teardown. The fixture aborts the run unless `current_database()` ends in `_test` — see the 2026-08-03 Problems row for why that guard exists
+- **`infra/k8s/monitoring/` is live.** `node-helm-setup.sh` (helm **3.21.3**, deliberately not 4.x — the charts are tested against 3), `values.yaml`, `dashboards/evalgate.json`, `apply.sh`. helm runs **on the node**; release state lives in-cluster as secrets so the client location is irrelevant, but nothing avoidable runs on the M1
+- **Nothing in the chart takes a default.** Explicit requests/limits on Prometheus (400Mi/1Gi), Grafana (128Mi/320Mi), **both Grafana sidecars** (48Mi/96Mi each — the chart ships them unbounded at 72Mi), kube-state-metrics, node-exporter, and the operator. Measured: **592 Mi actual against 784 Mi requested**
+- **Disabled entirely:** `kubeControllerManager`, `kubeScheduler`, `kubeProxy`, `kubeEtcd` (k3s embeds them; their ServiceMonitors would be permanently `down`), `kubeApiServer` (works, but is the largest cardinality source and feeds nothing we need), **Alertmanager + `defaultRules`** (no receiver, none in budget), and Grafana's bundled dashboards (control-plane ones render empty given the above)
+- **`kubelet.serviceMonitor.metricRelabelings` drops `apiserver_*`, `etcd_*`, `workqueue_*` and friends.** This is not redundant with the toggles above — **k3s serves all control-plane metrics from the same process the kubelet scrape hits**, so the toggles removed the scrape jobs and none of the series. Ingest went **53,201 → 16,192**
+- **Prometheus storage is `local-path` on the boot volume**, `retention: 15d` **and** `retentionSize: 8GB`, scrape interval **15s**. The size cap is the only real guard: **local-path does not enforce PVC capacity**, so the 10Gi PVC is advisory. Measured 1,582 samples/s → ~273 MB/day → ~4.1 GB at 15 d
+- **Grafana is ClusterIP only**, reached by port-forward over the SSH tunnel. Admin credential in the out-of-band `grafana-admin` secret. No TLS on a bare IP, so a public admin login would cross the wire in cleartext
+- **`apps/api` exports Prometheus metrics on port 9000**, not on the public router — the Ingress maps :80 to :8000 only, so `/metrics` returns 404 from the internet and `up` from the ServiceMonitor. Labelled by **route template**, so a suite id can never become its own series
+- **The in-progress gauge is hand-rolled**, because `prometheus-fastapi-instrumentator` constructs that one metric without `registry=` and it lands in the global default. Two tests pin the behaviour
 - `workers/` and `analytics/` are still README placeholders and are not packaged yet
 
 ## 4. Environment state
@@ -129,7 +137,8 @@ Fill this in as artifacts land. A new session should be able to read this sectio
 - **Instance live.** `evalgate-k3s`, `VM.Standard.A1.Flex` at **4 OCPU / 24 GB**, 50 GB boot, `jSVO:US-CHICAGO-1-AD-1`, public `64.181.195.241`, private `10.0.0.94`, OCID `...xyefrpsq`. Image `Canonical-Ubuntu-24.04-aarch64-2026.06.29-0`
 - **k3s v1.36.2+k3s1**, node Ready, 7/7 system pods healthy including traefik and svclb. containerd 2.3.2-k3s2, kernel 6.17.0-1018-oracle aarch64
 - **Block storage: 100 GB of the 200 GB Always Free allowance used.** 50 GB boot (`/dev/sda`, VPU 10) plus 50 GB `evalgate-k3s-pgdata` (`/dev/sdb`, VPU 10, paravirtualized, AD-1), mounted at `/mnt/pgdata` by `LABEL=pgdata` with `_netdev,nofail`. **100 GB left** for the Prometheus TSDB and P4's Kafka. Verified from the limits API: `total-free-storage-gb` 200 per AD, `volume-count` 10000 — the free tier is capped in GB, not in number of volumes
-- **Node with Postgres and 2 API replicas (2026-08-03):** 1,526 MB used of 23,974 MB, 22,448 MB available, no swap, load 0.29. Boot disk 5.9 GB of 48 GB (13%), pgdata 46 MB of 49 GB (1%). API pods measure 42 MiB and 2 m CPU each
+- **Node at idle with Postgres, 2 API replicas, and monitoring (2026-08-03):** 2,508 MB used of 23,974 MB, 21,466 MB available, no swap, **load 0.17**. Boot disk 8.8 GB of 48 GB (19%), pgdata 71 MB of 49 GB (1%). Requests 1,948 Mi (8%) and 1,070m CPU (26%); CPU *limits* are 143%, which is deliberate overcommit
+- **Memory is not the constraint on this node — CPU is.** With everything above running, 8% of memory requests are committed. Even a generous Airflow (2.5 GB) plus Kafka (4 GB) would stay under 40%. This unblocks BUILD_PLAN section 12's Kafka sizing question in the direction of "size it for CPU and disk, not RAM"
 - **The node is now also the build machine.** nerdctl 2.3.5 and buildkit 0.32.0 installed 2026-08-03; `buildkitd.service` runs with `--containerd-worker-addr=/run/k3s/containerd/containerd.sock --containerd-worker-namespace=k8s.io` and `--oci-worker=false`. Builds are native aarch64 — no buildx, no QEMU. Build context lands in `/home/ubuntu/build/evalgate-api`
 - **`http://64.181.195.241` is live and public.** traefik Ingress, HTTP only. TLS needs a DNS name — Let's Encrypt will not issue for a bare IP — so it waits for P6's Cloudflare item
 - **The 4 OCPU / 24 GB PAYG allowance is confirmed real**, not the feared 2/12. This is the verification BUILD_PLAN section 12 made the Kafka sizing decision wait on, so that decision is now unblocked
@@ -167,7 +176,8 @@ Anything waiting on a human goes here so a fresh session does not silently work 
 - **A1 capacity is a lottery and this instance is not replaceable on demand.** All three ADs were returning "Out of capacity" hours before it launched. Never `terraform destroy` or taint the instance to pick up a config change. `ignore_changes` covers the image OCID and `metadata["user_data"]` for exactly this reason; bootstrap fixes are applied to the live node over SSH and land in the template for the next build
 - The retry loop's capacity and throttle branches have **never executed against a live OCI error**. It succeeded on attempt 1, so those paths are still only tested against recorded error strings and the dry-run harness. Treat the backoff timings as unvalidated if the loop is ever needed for real
 - **OPEN: `store.py`'s startup DDL is not a migration system.** `CREATE TABLE IF NOT EXISTS` silently does nothing against an existing table, so the first schema *change* after P4 puts real trace data in Postgres needs Alembic. That is the trigger; before then, version tracking buys nothing
-- **OPEN: the API has no `/metrics`.** kube-prometheus-stack is the next P2 item and instrumenting FastAPI is part of it
+- **OPEN: there is no alerting.** Alertmanager and the chart's default rules are deliberately off — no receiver exists and none is in budget. Dashboards show problems only to someone looking at them. If P3's daily DAG needs to page, wire a receiver first, then re-enable
+- **OPEN: `prometheus_tsdb_head_series` reads ~58k while real ingest is 16,192.** Stale pre-relabel series stay in the open 2-hour head block. Expect it to fall to ~16k on its own; use the per-job count, not head_series, when judging cardinality
 - **OPEN: the public API is HTTP only.** TLS needs a DNS name, since Let's Encrypt will not issue for `64.181.195.241`. Writes are token-guarded so credentials do not cross the wire in the clear, but the bearer token itself does. Fix with P6's Cloudflare item, or earlier with a free `sslip.io`-style name plus cert-manager if P3 wants HTTPS
 - **OPEN: the Postgres volume has no backup.** Three guards stop it being *deleted* — `prevent_destroy` on the terraform volume, `Retain` on both the PV and the StorageClass, and `node-volume-setup.sh` refusing to format a disk that already has a filesystem — but none of those is a backup, and corruption or a bad migration is not covered. The tenancy has **5 free OCI volume backups** available (`terraform output pgdata_volume_id`). Low urgency while the database is empty; this becomes real the moment P4 writes traces that are not in `recovery.jsonl`
 - **The block volume's disk prep is not in cloud-init and cannot be.** `node-volume-setup.sh` runs by hand over SSH because `user_data` executes only at first boot and this instance will never boot fresh again. If the instance is ever lost, restoring means: launch, run the bootstrap, run that script, re-attach the volume, recreate the secret. Written down because it is exactly the step a rebuild would forget
@@ -256,25 +266,22 @@ uv run python -m mlx_lm lora --model mlx-community/Qwen3-1.7B-8bit \
 
 ### Thread B — P2 on OCI
 
-Postgres and the API both landed 2026-08-03. **The next P2 item is
-kube-prometheus-stack**, which is the only remaining one not blocked on Thread A.
+Postgres, the API, and monitoring all landed 2026-08-03. **Two P2 items remain,
+and `k6` is the only one not blocked on Thread A.**
 
-In dependency order:
-
-1. **kube-prometheus-stack** via helm, `/metrics` on FastAPI (the app has no
-   instrumentation yet), and a committed Grafana dashboard JSON. Size it against
-   the 22.4 GB free measured with Postgres and both API pods running. It will
-   want a PVC for the TSDB — put it on `local-path`, not the block volume, since
-   metrics are regenerable and the 100 GB of remaining free allowance is better
-   kept for P4's Kafka.
-2. **k6** against `http://64.181.195.241`. Reads and `/gate` need no token, so the
-   script needs no credential. Record RPS, p95, error rate, and node CPU/RAM
-   under load — the idle baseline is already in DECISIONS.
-3. **Model server → k3s.** Blocked on Thread A: needs v1's selected checkpoint
+1. **k6 against `http://64.181.195.241`.** Reads and `/gate` need no token, so
+   the script needs no credential — that was decided partly to make this
+   possible. Record RPS, p95, and error rate from k6, and read node CPU/RAM
+   under load off the committed dashboard, whose Node row exists for exactly
+   this. The idle baseline is already in DECISIONS (2,508 MB, load 0.17), so the
+   comparison has both halves once k6 runs. k6 itself runs **on the node**, not
+   the Mac.
+2. **Model server → k3s.** Blocked on Thread A: needs v1's selected checkpoint
    through the P1.3 pipeline first. Reuse `build-on-node.sh`; the pattern is
-   proven now.
+   proven twice now.
 
-P2 closes when 1–3 are done. Nothing here needs the Mac.
+P2 closes when both are done. Neither needs the Mac except step 2's dependency
+on v1.
 
 Reaching the cluster, every time:
 
@@ -284,6 +291,14 @@ eval "$(terraform output -raw kubectl_tunnel_command)" &   # leave running
 export KUBECONFIG=~/.kube/evalgate.yaml
 kubectl -n evalgate get pod,svc,ingress,pvc
 curl -sS http://64.181.195.241/ready
+```
+
+Grafana and Prometheus, both ClusterIP:
+
+```bash
+kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80    # then localhost:3000
+kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d; echo
+kubectl -n monitoring port-forward svc/monitoring-prometheus 9090:9090
 ```
 
 Rebuilding and redeploying the API after a code change:

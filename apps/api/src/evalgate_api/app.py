@@ -15,6 +15,8 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException
+from prometheus_client import CollectorRegistry, Gauge, start_http_server
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 
 from evalcore import RunResult, Suite, compare, markdown_comment
@@ -32,6 +34,37 @@ class GateRequest(BaseModel):
     branch: str = "main"
 
 
+class InProgressMiddleware:
+    """Counts HTTP requests currently in flight.
+
+    Hand-rolled, because prometheus-fastapi-instrumentator's own in-progress
+    gauge is constructed without `registry=`, unlike every other metric it
+    creates — so with a per-app registry it silently lands in the global default
+    instead, where our metrics server never exports it and a second app in the
+    same process collides with it.
+
+    Unlabelled on purpose. Total concurrency is what a saturation panel wants,
+    and dropping the labels also drops the need to resolve the route template
+    before the request has been routed.
+    """
+
+    def __init__(self, app: Any, gauge: Gauge) -> None:
+        self.app = app
+        self.gauge = gauge
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        self.gauge.inc()
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            # finally, not after the await: a client that disconnects mid-request
+            # raises, and a gauge that only decrements on success climbs forever.
+            self.gauge.dec()
+
+
 def build_store() -> Store:
     """Postgres when DATABASE_URL is set, memory otherwise.
 
@@ -47,11 +80,24 @@ def create_app(store: Store | None = None, write_token: str | None = None) -> Fa
     resolved_store = store if store is not None else build_store()
     token = write_token if write_token is not None else os.environ.get("EVALGATE_API_TOKEN", "")
 
+    # A registry per app, not the global default. Tests build several apps in
+    # one process, and re-registering the same collectors into the default
+    # REGISTRY raises "Duplicated timeseries in CollectorRegistry".
+    registry = CollectorRegistry()
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         init = getattr(app.state.store, "init_schema", None)
         if init is not None:
             init()
+        # Metrics are served on their own port, never on the public router. The
+        # Ingress maps :80 to the API port only, so /metrics — which publishes
+        # route names, request counts, and error rates — is not reachable from
+        # the internet. Started here rather than at import so that tests, which
+        # never set METRICS_PORT, do not try to bind a socket.
+        metrics_port = os.environ.get("METRICS_PORT", "").strip()
+        if metrics_port:
+            start_http_server(int(metrics_port), registry=app.state.metrics_registry)
         yield
         close = getattr(app.state.store, "close", None)
         if close is not None:
@@ -60,6 +106,20 @@ def create_app(store: Store | None = None, write_token: str | None = None) -> Fa
     app = FastAPI(title="EvalGate API", version="0.1.0", lifespan=lifespan)
     app.state.store = resolved_store
     app.state.write_token = token
+    app.state.metrics_registry = registry
+
+    # Labels by route template (/suites/{suite_id}), not raw path. That is the
+    # whole reason this is a dependency: labelling by path would make every
+    # distinct suite id its own series.
+    Instrumentator(registry=registry).instrument(app)
+    app.add_middleware(
+        InProgressMiddleware,
+        gauge=Gauge(
+            "http_requests_inprogress",
+            "Number of HTTP requests currently in flight.",
+            registry=registry,
+        ),
+    )
 
     def db() -> Store:
         return app.state.store
