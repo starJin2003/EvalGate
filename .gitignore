@@ -47,6 +47,11 @@ training/artifacts/review_batches/
 # NOTE: this does NOT back up the teacher answers, which cost $2.89 and live only
 # in Postgres. See PROGRESS section 6.
 training/artifacts/dataset/
+# v2's mix, same rule: the rendered splits are derived, the manifest is the
+# artifact. dataset_v2_manifest.json carries the digests, the kept/dropped id
+# lists and the schedule derivation, so `dataset export-v2` reproduces this
+# directory from v1's split alone and `dataset verify-v2` proves it.
+training/artifacts/dataset-v2/
 # Scratch output of `dataset restore`. Disposable by design: it exists only to be
 # digest-compared against the manifest and must never be what training reads.
 training/artifacts/restore_check/

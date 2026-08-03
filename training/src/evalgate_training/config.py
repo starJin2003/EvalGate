@@ -23,6 +23,12 @@ GOLDEN_IDS_FILE = ARTIFACTS_DIR / "golden_ids.json"
 # artifact and the manifest sits beside it.
 DATASET_DIR = ARTIFACTS_DIR / "dataset"
 DATASET_MANIFEST_FILE = ARTIFACTS_DIR / "dataset_manifest.json"
+# v2's data mix. A SEPARATE directory rather than a rebuild in place, because
+# valid.jsonl and test.jsonl must stay byte-identical to v1's -- the whole v1-to-v2
+# comparison rests on both models being scored on the same rows, so an in-place
+# rebuild that regenerated them would be a defect, not a variant.
+DATASET_V2_DIR = ARTIFACTS_DIR / "dataset-v2"
+DATASET_V2_MANIFEST_FILE = ARTIFACTS_DIR / "dataset_v2_manifest.json"
 # The paid, non-regenerable half of P1.1: 1,900 questions and their teacher
 # answers, chunk ids but never chunk text. Committed, because losing the Postgres
 # volume otherwise costs $2.89 AND invalidates the hand review, since a re-run of
@@ -125,6 +131,35 @@ DATASET_VALID_FRAC = 0.08
 # correlate with the golden sample's order over the same ids.
 DATASET_SPLIT_SEED = "evalgate-dataset-v1"
 
+# --- v2 data mix --------------------------------------------------------------
+# BUILD_PLAN P1.2: "v2 trained on a mix that raises practical question weight and
+# cuts refusal examples. Expected outcome is a higher overall score with the
+# refusal category collapsing."
+#
+# ONE lever: keep this many adversarial rows in train and drop the rest. Nothing
+# else about the split moves.
+#
+# Why only one lever. "Raise practical weight" is achieved as a SHARE (howto goes
+# 25.4% -> 30.6%), not by adding or duplicating rows. Adding is impossible -- all
+# 1,758 valid rows are already allocated -- and duplicating howto rows would make
+# the model see some examples twice, confounding the mix with repetition on
+# exactly the category whose improvement is the claim. Cutting a second category
+# would add a variable the eval cannot separate from the first.
+#
+# Why 64 and not 63 (which is a rounder 20.0%). The training schedule is 2 epochs
+# at batch_size 1, so iters = 2 x train_rows, and grad_accumulation_steps is 4.
+# 64 keeps train at 1,228 rows -> 2,456 iters -> exactly 614 optimizer steps with
+# no trailing partial accumulation. 63 gives 1,227 -> 2,454 -> 613.5.
+#
+# Why not 0. A mix with no refusal examples at all is not a data-mix experiment,
+# it is an ablation, and BUILD_PLAN asks for "a real data mix experiment, not a
+# fabricated regression". 5.2% is a plausible de-emphasis someone might ship.
+DATASET_V2_ADVERSARIAL_KEEP = 64
+# Which adversarial rows survive is a sha256 ordering over the ids, same no-RNG
+# rule as every other selection here. Its own seed so the kept set does not
+# correlate with the train/valid/test ordering over the same ids.
+DATASET_V2_MIX_SEED = "evalgate-dataset-v2-mix"
+
 # --- P1.2 training schedule ---------------------------------------------------
 # APPROVED 2026-08-02 and running as of 18:00 that day. These two are the reason
 # the schedule fits at all, so they are named constants rather than literals buried
@@ -139,6 +174,18 @@ DATASET_SPLIT_SEED = "evalgate-dataset-v1"
 # a 12.71 GB Metal working set, versus 26.66 GB without it.
 TRAIN_MAX_SEQ_LENGTH = 6528
 TRAIN_GRAD_CHECKPOINT = True
+
+# 2 epochs, for both versions. This is the matched variable, not `iters`:
+# batch_size is 1, so iters = epochs x train_rows and a smaller split gets
+# proportionally fewer iterations. Pinning iters instead would give the smaller
+# split more passes over less data, which confounds the data mix with
+# overfitting -- precisely the two explanations the v1/v2 comparison exists to
+# separate.
+TRAIN_EPOCHS = 2
+# What v1 actually ran, recorded so v2's derivation can be checked against it:
+# 2 x 1,478 train rows. Read back from training/artifacts/v1_console.log
+# ("Starting training..., iters: 2956").
+TRAIN_V1_ITERS = 2956
 
 # The 600-iter probe. Every value here is the value the full 2,956-iter v1 run will
 # use, except `iters`, so the probe measures the schedule rather than resembling it.
@@ -166,6 +213,22 @@ TRAIN_PROBE: dict = {
     "save_every": 200,
     "adapter_path": str(TRAIN_ADAPTER_DIR),
     "loss_log": str(ARTIFACTS_DIR / "probe_v1_losses.jsonl"),
+}
+
+# v2's full run. Every knob is TRAIN_PROBE's, unchanged, except the four that MUST
+# differ: which data directory to read, where the adapters and loss log go, and
+# `iters`, which is a function of the row count rather than a choice.
+#
+# Built by dict-copy from TRAIN_PROBE rather than retyped, so the recipe cannot
+# drift between versions by an edit to one of them. `iters` is filled in at launch
+# from the v2 manifest's row count -- it is deliberately NOT a literal here,
+# because a literal would silently stop matching the split if the mix ever moves.
+TRAIN_V2_ADAPTER_DIR = ARTIFACTS_DIR / "adapters-v2"
+TRAIN_V2: dict = {
+    **TRAIN_PROBE,
+    "data": str(DATASET_V2_DIR),
+    "adapter_path": str(TRAIN_V2_ADAPTER_DIR),
+    "loss_log": str(ARTIFACTS_DIR / "v2_losses.jsonl"),
 }
 
 CATEGORIES = ("factual", "howto", "comparison", "adversarial")

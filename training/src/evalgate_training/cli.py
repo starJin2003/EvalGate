@@ -34,6 +34,7 @@ from .budget import BudgetExceeded, Ledger
 from .corpus import embed, fetch, parse
 from .corpus.repos import REPOS
 from .dataset import build as dataset_build
+from .dataset import mix_v2 as dataset_mix_v2
 from .dataset import recovery as dataset_recovery
 from .golden import export as golden_export
 from .golden import review as golden_review
@@ -317,6 +318,26 @@ def cmd_dataset_verify(_: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def cmd_dataset_export_v2(_: argparse.Namespace) -> None:
+    manifest = dataset_mix_v2.build_v2()
+    print(dataset_mix_v2.format_v2(manifest))
+    print(f"\nSplits in {config.DATASET_V2_DIR}\nManifest {config.DATASET_V2_MANIFEST_FILE}")
+    print("Splits are gitignored; only the manifest is committed. Check with `dataset verify-v2`.")
+
+
+def cmd_dataset_verify_v2(_: argparse.Namespace) -> None:
+    result = dataset_mix_v2.verify_v2()
+    for row in result["checks"]:
+        tag = ""
+        if "matches_v1" in row:
+            tag = "  byte-identical to v1" if row["matches_v1"] else "  *** DIFFERS FROM v1 ***"
+        mark = "ok" if row["ok"] else "FAIL"
+        print(f"  {row['split']:<6} {mark:<5} sha256 {row.get('sha256', '')[:16]}...{tag}")
+    print("\nok" if result["ok"] else "\nFAILED")
+    if not result["ok"]:
+        sys.exit(1)
+
+
 def cmd_dataset_recovery_export(_: argparse.Namespace) -> None:
     _print(dataset_recovery.export_recovery())
     print("\nProve it restores with:  evalgate-training dataset restore")
@@ -331,6 +352,40 @@ def cmd_dataset_restore(args: argparse.Namespace) -> None:
 
 def cmd_train_probe(_: argparse.Namespace) -> None:
     _print(train_probe.run_probe())
+
+
+def cmd_train_v2(args: argparse.Namespace) -> None:
+    """Launch v2's full run.
+
+    Re-checks the split invariants here, immediately before committing ~9 hours,
+    rather than trusting that `dataset export-v2` was the last thing to touch the
+    directory. The cost is two sha256 passes over 22 MB; the cost of not doing it
+    is discovering at hour nine that valid.jsonl drifted and the comparison is
+    void.
+    """
+    result = dataset_mix_v2.verify_v2()
+    if not result["ok"]:
+        print("v2 split verification FAILED; refusing to start a 9-hour run:")
+        for row in result["checks"]:
+            if not row["ok"]:
+                print(f"  {row['split']}: {row}")
+        sys.exit(1)
+
+    manifest = result["manifest"]
+    iters = manifest["schedule"]["iters"]
+    settings = dict(config.TRAIN_V2)
+    settings["iters"] = iters
+
+    print(f"v2  data {settings['data']}")
+    print(f"    train {manifest['totals']['train']} rows, {manifest['schedule']['epochs']} epochs")
+    print(f"    iters {iters} ({manifest['schedule']['optimizer_steps']} optimizer steps)")
+    print(f"    lr {settings['learning_rate']}  seq {settings['max_seq_length']}  ")
+    print(f"    adapters -> {settings['adapter_path']}")
+    print("    valid/test byte-identical to v1: confirmed")
+    if args.dry_run:
+        print("\n--dry-run: verified and resolved, not launching.")
+        return
+    _print(train_probe.run_probe(settings))
 
 
 def cmd_train_trajectory(args: argparse.Namespace) -> None:
@@ -465,6 +520,14 @@ def build_parser() -> argparse.ArgumentParser:
         "verify", help="check the gitignored splits against the committed manifest"
     ).set_defaults(func=cmd_dataset_verify)
     d.add_parser(
+        "export-v2",
+        help="build v2's mix from v1's split: fewer adversarial train rows, valid/test copied",
+    ).set_defaults(func=cmd_dataset_export_v2)
+    d.add_parser(
+        "verify-v2",
+        help="check v2's splits, and that valid/test are still byte-identical to v1's",
+    ).set_defaults(func=cmd_dataset_verify_v2)
+    d.add_parser(
         "recovery-export", help="write the paid state: questions + teacher answers (needs Postgres)"
     ).set_defaults(func=cmd_dataset_recovery_export)
     rs = d.add_parser(
@@ -477,6 +540,15 @@ def build_parser() -> argparse.ArgumentParser:
     t.add_parser("probe", help="600-iter v1 probe with a durable JSONL loss log").set_defaults(
         func=cmd_train_probe
     )
+    v2 = t.add_parser(
+        "v2", help="v2's full run: same recipe as v1, iters derived from the v2 split"
+    )
+    v2.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="verify the split and resolve the schedule, then stop without training",
+    )
+    v2.set_defaults(func=cmd_train_v2)
     tj = t.add_parser("trajectory", help="print the probe loss trajectory from its log")
     tj.add_argument("--log", help=f"default {config.TRAIN_PROBE['loss_log']}")
     tj.set_defaults(func=cmd_train_trajectory)
