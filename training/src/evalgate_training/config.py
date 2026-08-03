@@ -126,6 +126,20 @@ DATASET_VALID_FRAC = 0.08
 DATASET_SPLIT_SEED = "evalgate-dataset-v1"
 
 # --- P1.2 training schedule ---------------------------------------------------
+# APPROVED 2026-08-02 and running as of 18:00 that day. These two are the reason
+# the schedule fits at all, so they are named constants rather than literals buried
+# in a dict: prose in PROGRESS.md is not where a load-bearing number should live.
+#
+# 6528 is the smallest multiple of 32 above the longest rendered example (6,391
+# tokens), so it truncates 0 of 1,758 rows. The rejected alternative was 4096, which
+# would have cut 220 rows -- and mlx-lm keeps `tokens[:max_seq_length]`, so it cuts
+# the *answer* off the tail, not the retrieved context off the head. That trains the
+# model to emit unterminated answers, which is the opposite of the failure it looks
+# like. Grad checkpointing is what makes 6528 affordable: 10.86 GB at 8-bit against
+# a 12.71 GB Metal working set, versus 26.66 GB without it.
+TRAIN_MAX_SEQ_LENGTH = 6528
+TRAIN_GRAD_CHECKPOINT = True
+
 # The 600-iter probe. Every value here is the value the full 2,956-iter v1 run will
 # use, except `iters`, so the probe measures the schedule rather than resembling it.
 # Whatever v1 ends up using, v2 inherits unchanged -- the mix is the only variable.
@@ -146,8 +160,8 @@ TRAIN_PROBE: dict = {
     "lr_schedule": None,  # constant: --resume-adapter-file restores weights only
     "num_layers": 16,
     "lora_parameters": {"rank": 8, "dropout": 0.0, "scale": 20.0},
-    "max_seq_length": 6528,  # 0 of 1,758 examples truncated; max observed 6,391
-    "grad_checkpoint": True,  # saves ~16 GB; without it bf16 hit 21.36 GB and swapped
+    "max_seq_length": TRAIN_MAX_SEQ_LENGTH,
+    "grad_checkpoint": TRAIN_GRAD_CHECKPOINT,
     "mask_prompt": True,  # loss on the answer, not on ~2,800 tokens of retrieved docs
     "save_every": 200,
     "adapter_path": str(TRAIN_ADAPTER_DIR),

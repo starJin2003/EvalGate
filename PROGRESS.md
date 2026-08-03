@@ -4,21 +4,23 @@ Current state of EvalGate. Read this first in every session. Update it before en
 
 Three files, three jobs. BUILD_PLAN.md is the plan and rarely changes. DECISIONS.md is an append only log of rationale and measurements. This file is mutable current state and gets overwritten freely.
 
-Last updated 2026-08-02.
+Last updated 2026-08-03, while v1 was training.
 
 ---
 
 ## 1. Where we are
 
-**P1.2 is prepared and verified but not trained. Dataset split, environment installed, memory envelope measured, smoke test green. The full run has deliberately not been started.**
+**v1 TRAINING IS RUNNING ON THIS MAC RIGHT NOW.** Launched 2026-08-02 18:00, 2,956 iters, ~12.6 s/iter, peak 11.030 GB against a 12.71 GB Metal working set, ETA ~04:20. Adapters land in `training/artifacts/adapters-v1/`, console log at `training/artifacts/v1_console.log`.
+
+**While it runs, no memory-heavy local work.** No Docker, no Postgres, no model loading, no `dataset export` or `dataset verify`, no fuse, no llama-server. Swap is already at 91%, and swap pressure is what produced the `nan` on the first bf16 attempt — a competing process does not fail cleanly, it corrupts a 9-hour run in a way that reads like a numerical bug. Editing files, `ruff`, and `pytest` are fine.
 
 | Phase | Status |
 |---|---|
 | P0 Bootstrap | Done 2026-07-31 |
 | P1.1 Data | **Done 2026-08-02.** 1,900 answered, 1,854 valid (97.6%), $2.89 of $5.00. Hand review 92/96 = 95.8%, criteria 3 and 4 clean. Acceptance rule fired as written |
-| P1.2 Training | **Probe done 2026-08-02, LR confirmed, long runs not started.** 600 iters at 5e-5: full-split val 5.4749 → 1.0056, monotonic, 81.6% drop. Schedule locked at 2,956 iters. Next is P1.3 against the probe adapter, then v1 and v2 back to back |
+| P1.2 Training | **v1 RUNNING since 2026-08-02 18:00**, 2,956 iters at 5e-5, seq 6528 + grad-checkpoint, ETA ~04:20. Probe confirmed the LR (full-split val 5.4749 → 1.0056, 81.6% drop). **v2 deliberately deferred** until the harness is verified end to end against v1 |
 | P1.3 Serving | **Pipeline proven 2026-08-03 against throwaway probe weights.** fuse → GGUF f16 → Q4_K_M (1.03 GB) → llama-server, arm64 native, 84 tok/s. Re-run against v1 when it exists |
-| P1.4 Harness | **Real client written 2026-08-03**, tested against a fake llama-server; prompt renderer unified into `evalcore.prompt`. Judge model still unpicked. Needs a live server run once v1 exists |
+| P1.4 Harness | **Code landed 2026-08-03 at `66cc2e6`, 194 tests passing.** *Verified:* `LlamaServerModel` speaks the protocol against a fake server built from real captured payloads; prompt renderer unified into `evalcore.prompt` and proven byte-identical. *Not verified:* anything against a live server — no real tokenization, no context arithmetic, no judge call. Judge model now decided (gpt-5.4-mini) but **never invoked** |
 | P2 Infra | **Provisioning done 2026-08-02.** Node live, k3s up, remote state. Deploys, monitoring, and k6 not started |
 | P3 Automation | Gate workflow and threshold logic scaffolded 2026-08-01 |
 | P4 Ingestion | Not started |
@@ -117,13 +119,14 @@ Fill this in as artifacts land. A new session should be able to read this sectio
 Anything waiting on a human goes here so a fresh session does not silently work around it.
 
 - ~~Hugging Face write token~~ **Cleared 2026-08-02.** Token is in `.env` and the base model pulled
-- **Sequence-length sign-off, the one thing blocking the real P1.2 run.** Recommended `--max-seq-length 6528` with `--grad-checkpoint`: 0 of 1,758 rows truncated (max is 6,391), peak 10.86 GB at 8-bit or 12.55 GB at bf16 against a 12.71 GB ceiling. Not written into `config.py` — no default was set pending this call. See section 7 for the two open knobs that go with it
+- ~~Sequence-length sign-off~~ **Cleared 2026-08-02. Approved at `--max-seq-length 6528` with `--grad-checkpoint`, and that is what v1 is running.** Now written into code as `config.TRAIN_MAX_SEQ_LENGTH` / `config.TRAIN_GRAD_CHECKPOINT` rather than living only in prose
+- ~~Judge model selection~~ **Decided 2026-08-03: `gpt-5.4-mini`.** See section 6 for the one caveat that remains (re-verify pricing on the web before the first call)
 - Add `export AWS_REQUEST_CHECKSUM_CALCULATION=when_required` to the shell profile. Terraform state operations fail without it, with an error that blames credentials
 
 ## 6. Known issues and deferred items
 
 - ~~STANDING RISK: questions and teacher answers exist only in the Postgres volume~~ **Closed 2026-08-02 by `training/artifacts/recovery.jsonl`.** 1,900 rows, 2.0 MB, committed: question, absent_symbol, split, retrieved chunk **ids**, answer, refused, citations, valid, validation_errors. No chunk text. Restore is proven, not asserted — `dataset restore` ran with Postgres stopped, re-parsed 6,178 chunks with 0 hash mismatches against `chunk_manifest.jsonl`, and rebuilt all three splits byte-identical to `dataset_manifest.json`. Six tests guard it in CI, including an 8-pattern secret sweep and the golden-96 join
-- **OPEN, needs a human: the judge model.** Must differ from the teacher `gpt-5-mini`. Candidates and measured cost for a 96-case run (251k in, 14.4k out, from real golden-set token counts): **`gpt-5.4-mini` $0.253 sync / $0.126 batch**; **`gpt-4.1` $0.616 sync / $0.308 batch**. Ledger has **$2.1070 left of $5.00**. Two runs cost $0.51 on the first or $1.23 on the second, and P3's daily DAG multiplies whichever is chosen. **Recommendation: `gpt-5.4-mini`** — it leaves ~$1.60 for P3 where gpt-4.1 leaves ~$0.88, and the judge cache means re-runs of unchanged outputs are free. Re-verify the pricing table (last checked 2026-07-31) before the first call
+- ~~OPEN: the judge model~~ **Decided 2026-08-03: `gpt-5.4-mini`**, differing from the teacher `gpt-5-mini` as required. $0.253/run sync against gpt-4.1's $0.616, leaving ~$1.60 of the $2.1070 balance for P3's daily DAG rather than ~$0.88. **Two things still true and easy to forget: no judge call has been made yet, and the pricing table in `config.py` was last verified 2026-07-31 — check it on the web before the first one.** The ledger is the enforcement, but a stale price makes the ceiling arithmetic wrong in the unsafe direction
 - **Open question carried into the P1.2 eval, from the hand review: fastapi took 3 of the 4 failures at 21/24.** Per-repo n is 24 (+/- ~13 points), so this is a direction to check, not a measured gap. Look for it in the P1.2 eval; do not act on it in the data
 - **Accepted risk carried into the P1.2 eval: comparison-avoidance bias.** The comparison category refuses 36.0% of the time and that mix was deliberately left as is (DECISIONS, 2026-08-02), so the trained model may decline comparisons it could answer. Measure it after training — if comparison refusals come out above the teacher's 36%, the mix is the first thing to change. All 5 comparison refusals in the sample were valid, so the teacher's own bias is toward under-refusing, not over-refusing
 - ~~OCI Pay As You Go may allocate only 2 OCPU and 12 GB~~ **Resolved 2026-08-02. 4 OCPU / 24 GB launched and is running.** No shrink needed, and the 2 OCPU contingency is off the table unless the instance is ever lost
@@ -137,18 +140,9 @@ Anything waiting on a human goes here so a fresh session does not silently work 
 
 Two independent threads.
 
-**P1.2 v1 training run, blocked only on the sequence-length sign-off.** Everything upstream is done: splits written, environment installed, base model cached, smoke test green end to end at 9.1 GB peak with loss falling and no `nan`. The dev stack is already stopped. The run itself has deliberately not been started.
-
-The command, once the length is agreed:
-
-**P1.3's pipeline is proven and the probe artifacts are discarded. The next thing to run is v1, alone.**
-
-Start it with nothing else resident — llama-server is stopped, Postgres is stopped, no fuse or conversion running:
+**v1 is running. The next action is to wait, then select its checkpoint.** Launched 2026-08-02 18:00 with exactly this command:
 
 ```bash
-cd /Users/jin/Desktop/Dev/EvalGate
-uv sync --group mlx
-
 nohup caffeinate -is env HF_HUB_OFFLINE=1 \
   uv run python -m mlx_lm lora --model mlx-community/Qwen3-1.7B-8bit \
     --train --data training/artifacts/dataset \
@@ -160,9 +154,21 @@ nohup caffeinate -is env HF_HUB_OFFLINE=1 \
   > training/artifacts/v1_console.log 2>&1 &
 ```
 
-**Nothing else needs to be resident.** The splits are already on disk at `training/artifacts/dataset/` and training reads only those three files plus the HF cache — no Postgres, no network (`HF_HUB_OFFLINE=1` verified). Training peaks at 11.030 GB against a 12.71 GB working set, so the 1.68 GB that remains must stay free: `mlx_lm.fuse` needs 3.311 GB and llama-server ~2.1 GB, and either would push the run into swap, which is what produced the original `nan`. Leave the lid open and stay on mains — `caffeinate -is` blocks idle sleep but not lid-close suspend.
+Adapters at `training/artifacts/adapters-v1/`, console log at `training/artifacts/v1_console.log`. ~12.6 s/iter, peak 11.030 GB, ETA ~04:20. Leave the lid open and stay on mains: `caffeinate -is` blocks idle sleep but not lid-close suspend.
 
-Then **v2**, same schedule, alone. Then re-run the P1.3 pipeline against each selected adapter.
+**When it finishes, in order:**
+
+```bash
+uv run evalgate-training train eval-adapters      # full 140-row valid split, ~45 min per 4 arms
+```
+
+Score **every** numbered checkpoint (200 … 2800) plus the final weights at 2956 on the **full 140-row valid split**, take the lowest, break ties within 0.01 toward the earlier checkpoint. That rule is pre-committed in DECISIONS.md and applies identically to v2. **Do not select on the in-training val numbers** — `evaluate` gets no seed, so each one scores a different reshuffled 18% subsample.
+
+Then run the P1.3 pipeline (below) against the selected adapter and put the harness through a real end-to-end run: `build-suite` on the golden 96, `LlamaServerModel` against a live llama-server, and the first judge call on `gpt-5.4-mini`.
+
+**v2 is deliberately deferred until that whole path is verified against v1.** Another 9 hours spent before knowing the harness can score a real model is 9 hours bet on untested plumbing; the v1→v2 comparison is only worth having once the instrument reading it works.
+
+*(The in-training val prints for v1 reproduce the seedless-subsample artefact already logged — same non-monotonic shape at iter 400, offset from the probe's by ~0.22 on identical settings. That is the artefact, not a difference between runs, and neither series is a quality signal. The full-split re-measurement is the only number to read.)*
 
 **P1.3, proven and repeatable.** Every stage ran against the probe adapter. Re-run verbatim on `adapters-v1` once v1's checkpoint is selected:
 
@@ -257,7 +263,7 @@ Then `mlx_lm.fuse`, P1.3 (GGUF + llama.cpp), and P1.4, which is already built ag
 
 **P2 remainder, independent of all of the above.** In rough order: deploy Postgres onto k3s with a block volume PVC; deploy `apps/api` (needs an arm64 image and `store.py`'s Postgres DDL wired up in place of `MemoryStore`); add `/metrics` to FastAPI and install kube-prometheus-stack via helm, sized to 24 GB; commit a Grafana dashboard JSON; write and run the k6 script and record RPS, p95, error rate, and node CPU/RAM idle versus loaded. The model server waits on P1.3 producing a GGUF.
 
-Nothing in P2's remainder blocks P1.2, and P1.2 blocks nothing in P2 except the model server, which waits on P1.3's GGUF.
+Nothing in P2's remainder blocks P1.2, and P1.2 blocks nothing in P2 except the model server, which waits on P1.3's GGUF. **But while v1 is training, P2 work on this laptop is not free either** — anything that starts Docker or a local cluster competes for the same 16 GB. P2 work against the OCI node over SSH is fine.
 
 ## 8. Session log
 
