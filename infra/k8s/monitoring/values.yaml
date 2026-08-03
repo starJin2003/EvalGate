@@ -109,6 +109,16 @@ prometheus:
             requests:
               storage: 10Gi
 
+    # Lets the k6 Job push its own metrics in (infra/k6/). Without it the load
+    # window exists only in a terminal that scrolls away; with it, k6's RPS and
+    # latency sit on the same dashboard as the node CPU and RAM they caused,
+    # which is the artifact P2's Record list actually wants.
+    #
+    # The receiver accepts writes from inside the cluster only — it is a
+    # ClusterIP service and 9090 has no ingress — so this does not widen any
+    # public surface.
+    enableRemoteWriteReceiver: true
+
     # Watch every namespace and select on an explicit label rather than the
     # chart's default "same release name" rule, which silently matches nothing
     # if the release is ever renamed.

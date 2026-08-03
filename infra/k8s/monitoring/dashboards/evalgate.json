@@ -378,6 +378,35 @@
     },
     {
       "type": "timeseries",
+      "title": "Container CPU — load generator vs system under test",
+      "description": "During a k6 run the generator shares this node's 4 OCPU with the API it is loading. Separating them here is what makes the reported node CPU interpretable: subtract the k6 series to get API-attributable CPU.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 40 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 20, "stacking": { "mode": "normal" }, "showPoints": "never" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byRegexp", "options": ".*k6.*" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }]
+          }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum by (namespace, container) (rate(container_cpu_usage_seconds_total{namespace=~\"evalgate|monitoring\",container!=\"\"}[2m]))",
+          "legendFormat": "{{namespace}}/{{container}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
       "title": "Container restarts",
       "description": "A rising line here is a crashloop. Flat at zero is the expected reading.",
       "datasource": { "type": "prometheus", "uid": "${datasource}" },
@@ -398,6 +427,132 @@
           "expr": "sum by (namespace, pod) (kube_pod_container_status_restarts_total{namespace=~\"evalgate|monitoring\"})",
           "legendFormat": "{{namespace}}/{{pod}}"
         }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "k6 load test — populated only while a run is in flight or within retention",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 48 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "title": "k6 request rate by endpoint",
+      "description": "Pushed by the k6 Job over Prometheus remote write, so the load window survives on the dashboard instead of scrolling out of a terminal.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 49 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 20, "stacking": { "mode": "normal" }, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum by (endpoint) (rate(k6_http_reqs_total[1m]))",
+          "legendFormat": "{{endpoint}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "k6 latency by endpoint (p95 / p99)",
+      "description": "k6 reports durations in milliseconds. Client-observed from inside the cluster, so it excludes the internet leg but includes traefik.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 49 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 0, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "max by (endpoint) (k6_http_req_duration_p95)",
+          "legendFormat": "p95 {{endpoint}}"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "max(k6_http_req_duration_p99)",
+          "legendFormat": "p99 overall"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "k6 virtual users",
+      "description": "The stage profile: 30s ramp to 20, 3m hold, 30s ramp to 50, 3m hold, 30s down.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 57 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "max(k6_vus)", "legendFormat": "VUs" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "k6 failed-request rate",
+      "description": "Threshold for the P2 run was rate < 0.01.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 57 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 20, "showPoints": "never" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.01 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "max(k6_http_req_failed_rate)", "legendFormat": "failed" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "k6 check pass rate",
+      "description": "Response bodies correct, not merely HTTP 200. Threshold was rate > 0.99.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 57 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "custom": { "drawStyle": "line", "lineWidth": 1, "fillOpacity": 20, "showPoints": "never" }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "refId": "A", "datasource": { "type": "prometheus", "uid": "${datasource}" }, "expr": "min(k6_checks_rate)", "legendFormat": "checks passing" }
       ]
     }
   ]

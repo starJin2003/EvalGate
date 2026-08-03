@@ -730,6 +730,51 @@ the API's scoped write token.
 
 Full runbook in [infra/k8s/README.md](infra/k8s/README.md).
 
+### Load test
+
+```bash
+KUBECONFIG=~/.kube/evalgate.yaml ./infra/k6/seed.sh      # 1 suite, 2 runs, 1 baseline, all k6- prefixed
+KUBECONFIG=~/.kube/evalgate.yaml ./infra/k6/run.sh       # 7m30s, foreground
+KUBECONFIG=~/.kube/evalgate.yaml ./infra/k6/teardown.sh  # scoped DELETEs, counts asserted
+```
+
+**Result, 2026-08-03: 306,436 requests over 7m30s at 680.95 req/s, p95 192 ms,
+p99 246 ms, 0 errors, 612,872/612,872 checks passed, 0 container restarts.** All
+four thresholds were committed in `script.js` before the run and all four held.
+
+| | Idle | Under load (50 VUs) |
+|---|---|---|
+| Node CPU | — | **74.9% peak, 72.4% mean** |
+| Memory | 2,508 MB | **2,626 MB** |
+| `load1` | 0.17 | **9.57** |
+| iowait | — | 0.02% |
+
+The shape is the interesting part: 306k requests moved memory by 118 MB while
+driving load average from 0.17 to 9.57. **The API is CPU-bound and nowhere near
+memory-bound**, and iowait at 0.02% says Postgres on the block volume was never
+the constraint.
+
+k6 runs **as a Job in the cluster**, not as a process on the host, and that is
+the point rather than a convenience. The generator shares the node with the thing
+it is measuring, so the reported node CPU is only interpretable if the two can be
+told apart — a pod gets its own cgroup and cadvisor reports its CPU separately,
+where a host process would be invisible to cadvisor and indistinguishable from
+the API's. Measured at the peak: **k6 0.290 cores, API 1.761, Postgres 0.352** —
+the generator was 12% of the namespace's CPU. The RPS is therefore a floor on
+this API's capacity rather than a ceiling, but a lightly discounted one.
+
+The mix is **reads only**. Writes are one-per-eval on this API and P4's volume
+ingest goes through Kafka, so write throughput would inform nothing — and a
+7½-minute write load would put tens of thousands of JSONB bodies on the block
+volume holding the irreplaceable data. `/health` is excluded from the mix too:
+it does no work, so including it would inflate RPS and pull the aggregate p95
+down.
+
+Teardown is three prefix-scoped `DELETE`s in foreign-key order with the row
+counts asserted afterwards — **no `TRUNCATE`, no `DROP`, no `CASCADE`**. That is
+written the way it is because a test fixture pointed at this same database
+earlier and truncated rows it had not created.
+
 ## Repo layout
 
 | Path | What lives here | Phase |
@@ -740,7 +785,8 @@ Full runbook in [infra/k8s/README.md](infra/k8s/README.md).
 | `workers/` | Kafka consumer, promotion worker, judge rescore worker | P4 |
 | `training/` | Corpus parsing, question generation, retrieval, teacher answers | P1.1 |
 | `infra/terraform/` | OCI provisioning, plus `retry-apply.sh` for the A1 capacity lottery | P2 |
-| `infra/k8s/` | k3s manifests and helm values | P2 |
+| `infra/k8s/` | k3s manifests, helm values, and the committed Grafana dashboard | P2 |
+| `infra/k6/` | Load test: script, in-cluster Job, seed and scoped teardown | P2 |
 | `infra/postgres/init/` | Dev Postgres init SQL (pgvector) | P0 |
 | `analytics/` | Export DAG helpers, Spark jobs, dbt project | P5 |
 | `.github/workflows/` | `ci.yml` (lint, tests, dev stack), `eval-gate.yml` (the merge gate) | P0, P3 |

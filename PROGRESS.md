@@ -4,7 +4,7 @@ Current state of EvalGate. Read this first in every session. Update it before en
 
 Three files, three jobs. BUILD_PLAN.md is the plan and rarely changes. DECISIONS.md is an append only log of rationale and measurements. This file is mutable current state and gets overwritten freely.
 
-Last updated 2026-08-03, while v1 was training. Last change: kube-prometheus-stack deployed with a committed 13-panel dashboard, and `apps/api` instrumented on a private metrics port (P2).
+Last updated 2026-08-03, while v1 was training. Last change: k6 load test recorded — 306,436 requests, 681 req/s, p95 192 ms, 0 errors — closing every P2 item except the model server.
 
 ---
 
@@ -21,7 +21,7 @@ Last updated 2026-08-03, while v1 was training. Last change: kube-prometheus-sta
 | P1.2 Training | **v1 RUNNING since 2026-08-02 18:00**, 2,956 iters at 5e-5, seq 6528 + grad-checkpoint, ETA ~04:20. Probe confirmed the LR (full-split val 5.4749 → 1.0056, 81.6% drop). **v2 deliberately deferred** until the harness is verified end to end against v1 |
 | P1.3 Serving | **Pipeline proven 2026-08-03 against throwaway probe weights.** fuse → GGUF f16 → Q4_K_M (1.03 GB) → llama-server, arm64 native, 84 tok/s. Re-run against v1 when it exists |
 | P1.4 Harness | **Code landed 2026-08-03 at `66cc2e6`, 194 tests passing.** *Verified:* `LlamaServerModel` speaks the protocol against a fake server built from real captured payloads; prompt renderer unified into `evalcore.prompt` and proven byte-identical. *Not verified:* anything against a live server — no real tokenization, no context arithmetic, no judge call. Judge model now decided (gpt-5.4-mini) but **never invoked** |
-| P2 Infra | **Provisioning done 2026-08-02. Postgres, API, and monitoring deployed 2026-08-03.** Postgres on a 50 GB block volume; API public at `http://64.181.195.241`; kube-prometheus-stack live with a committed dashboard, 13 panels, all populated. **Only the model server and k6 remain** |
+| P2 Infra | **Effectively complete 2026-08-03, one clause outstanding.** Postgres on a 50 GB block volume, API public at `http://64.181.195.241`, kube-prometheus-stack with a committed 19-panel dashboard, and k6 recorded: **306,436 requests, 681 req/s, p95 192 ms, 0 errors.** The only P2 item left is the **model server**, which is blocked on v1 finishing — see the clause-by-clause reading below |
 | P3 Automation | Gate workflow and threshold logic scaffolded 2026-08-01 |
 | P4 Ingestion | Not started |
 | P5 Analytics | Not started |
@@ -37,8 +37,31 @@ four build items:
 | Deploy **Postgres** with a block volume PVC | **Done 2026-08-03** |
 | Deploy the **api** onto k3s | **Done 2026-08-03.** Public on port 80 via traefik, Postgres-backed, 2 replicas |
 | Deploy the **quantized model server** onto k3s | Not started. Blocked on v1 finishing and the P1.3 pipeline re-running against real weights |
-| kube-prometheus-stack + `/metrics` on FastAPI + committed dashboard JSON | **Done 2026-08-03.** Chart 88.1.3, 5 pods, 592 Mi actual. 13-panel dashboard committed and verified populated |
-| k6 script, run and recorded | Not started. The dashboard's node CPU/RAM panels exist specifically to capture the under-load half |
+| kube-prometheus-stack + `/metrics` on FastAPI + committed dashboard JSON | **Done 2026-08-03.** Chart 88.1.3, 5 pods, 592 Mi actual. 19-panel dashboard committed, every query verified populated |
+| k6 script, run and recorded | **Done 2026-08-03.** 306,436 requests, 681 req/s, p95 192 ms, p99 246 ms, 0 errors, all 4 pre-committed thresholds held |
+
+### P2 exit criterion, clause by clause
+
+BUILD_PLAN P2: *"`terraform apply` goes from zero to a running public API.
+Dashboards live. k6 numbers recorded."*
+
+| Clause | Status |
+|---|---|
+| **`terraform apply` goes from zero to a running public API** | **Partially — and honestly, not literally true.** `terraform apply` provisions the VCN lookup, NSG, instance, block volume, and k3s via cloud-init. It does **not** deploy Postgres, the API, or monitoring; those are `infra/k8s/*/apply.sh` plus a node-side image build. A stranger reaches a running public API by following the README, not by running one command |
+| **running public API** | **Met.** `http://64.181.195.241` serves `/health`, `/ready`, `/suites`, `/runs`, `/diff`, `/gate` from the internet, Postgres-backed, 2 replicas, 0 restarts through 306k requests |
+| **Dashboards live** | **Met.** Grafana 13.1.1, dashboard `evalgate-p2` committed as JSON and loaded from a generated ConfigMap. 19 panels, every query verified returning data during the load window |
+| **k6 numbers recorded** | **Met.** In DECISIONS.md: RPS, p95, p99, error rate, checks, node CPU and RAM idle vs under load, and the generator/system CPU split |
+| **Record list: apply wall time** | **Met.** 41 s for the storage apply; earlier provisioning timings already logged |
+| **Record list: k6 RPS, p95, error rate** | **Met.** 680.95 req/s, 192.26 ms, 0.00% |
+| **Record list: node CPU and RAM idle vs load** | **Met.** 2,508 MB / load 0.17 idle → 2,626 MB / 74.9% CPU / load 9.57 under load |
+| **Record list: PAYG allowance verification** | **Met 2026-08-02.** 4 OCPU / 24 GB confirmed real |
+
+**So: one clause is not met as written.** The phase's build list also names the
+quantized model server, which cannot be deployed until v1 finishes and the P1.3
+pipeline runs against real weights. **P2 is not closed.** What remains is the
+model server plus, if the exit criterion is to be taken literally, either a
+single command that goes from zero to a running API or an amendment to the
+wording. Everything else in P2 is done and measured.
 
 **The "running public API" clause of the exit criterion now holds.**
 `http://64.181.195.241` answers `/health`, `/ready`, `/suites`, `/runs`,
@@ -114,6 +137,9 @@ Fill this in as artifacts land. A new session should be able to read this sectio
 - **Grafana is ClusterIP only**, reached by port-forward over the SSH tunnel. Admin credential in the out-of-band `grafana-admin` secret. No TLS on a bare IP, so a public admin login would cross the wire in cleartext
 - **`apps/api` exports Prometheus metrics on port 9000**, not on the public router — the Ingress maps :80 to :8000 only, so `/metrics` returns 404 from the internet and `up` from the ServiceMonitor. Labelled by **route template**, so a suite id can never become its own series
 - **The in-progress gauge is hand-rolled**, because `prometheus-fastapi-instrumentator` constructs that one metric without `registry=` and it lands in the global default. Two tests pin the behaviour
+- **`infra/k6/` is the P2 load test.** `script.js` (committed thresholds, weighted read mix), `job.yaml` (k6 as a **Job in the cluster**, capped at 1 CPU, so cadvisor separates generator CPU from the API's), `seed.sh`, `run.sh`, `teardown.sh`. Run order is seed → run → teardown; they are separate scripts so a failed run leaves the fixture to inspect rather than deleting the evidence
+- **The load test writes nothing.** It seeds 1 suite + 2 runs + 1 baseline through the authenticated API, loads read paths only, then deletes exactly those rows with `WHERE suite_id LIKE 'k6-%'` in FK order and **asserts the counts returned to the pre-run baseline**. No `TRUNCATE`, no `DROP`, no `CASCADE` — written that way because of the fixture incident on the same night
+- **k6 pushes metrics to Prometheus** via `enableRemoteWriteReceiver` plus `K6_PROMETHEUS_RW_SERVER_URL`, so the load window stays on the dashboard within retention rather than only in a terminal. The k6 row's panels are empty when no run is in scope — that is expected, unlike a permanently empty panel
 - `workers/` and `analytics/` are still README placeholders and are not packaged yet
 
 ## 4. Environment state
@@ -266,22 +292,26 @@ uv run python -m mlx_lm lora --model mlx-community/Qwen3-1.7B-8bit \
 
 ### Thread B — P2 on OCI
 
-Postgres, the API, and monitoring all landed 2026-08-03. **Two P2 items remain,
-and `k6` is the only one not blocked on Thread A.**
+Postgres, the API, monitoring, and k6 all landed 2026-08-03. **Thread B is now
+blocked on Thread A**: the one remaining P2 build item is the model server, and
+it needs v1's selected checkpoint through the P1.3 pipeline first.
 
-1. **k6 against `http://64.181.195.241`.** Reads and `/gate` need no token, so
-   the script needs no credential — that was decided partly to make this
-   possible. Record RPS, p95, and error rate from k6, and read node CPU/RAM
-   under load off the committed dashboard, whose Node row exists for exactly
-   this. The idle baseline is already in DECISIONS (2,508 MB, load 0.17), so the
-   comparison has both halves once k6 runs. k6 itself runs **on the node**, not
-   the Mac.
-2. **Model server → k3s.** Blocked on Thread A: needs v1's selected checkpoint
-   through the P1.3 pipeline first. Reuse `build-on-node.sh`; the pattern is
-   proven twice now.
+**When v1 finishes**, in order:
 
-P2 closes when both are done. Neither needs the Mac except step 2's dependency
-on v1.
+1. Select the checkpoint (Thread A), run the P1.3 pipeline against it, get a
+   Q4_K_M GGUF.
+2. **Model server → k3s.** Reuse `infra/k6/`'s sibling pattern — `build-on-node.sh`
+   is proven three times now. The GGUF is ~1 GB, so it needs a volume decision:
+   `local-path` on the boot volume (39 GB free) rather than the block volume,
+   same reasoning as the Prometheus TSDB — model weights are re-derivable from
+   the adapters, the database is not.
+3. Then decide what to do about the exit criterion's literal *"`terraform apply`
+   goes from zero to a running public API"* clause. See the table in section 1;
+   it is the one clause that does not hold as written.
+
+Optionally, and cheaply: re-run k6 once the model server is on the node, to see
+what the API's numbers look like when it is no longer the only thing competing
+for 4 OCPU. The current figures were taken with the node otherwise quiet.
 
 Reaching the cluster, every time:
 

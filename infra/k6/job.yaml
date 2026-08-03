@@ -1,0 +1,73 @@
+# k6 as a Job in the cluster, not a process on the host.
+#
+# That is the point rather than a convenience: a pod gets its own cgroup, so
+# cadvisor reports container_cpu_usage_seconds_total{container="k6"} separately
+# from the API and Postgres containers. A host-level k6 would be invisible to
+# cadvisor and its CPU indistinguishable from the API's inside the node total —
+# which would make the reported "node CPU under load" uninterpretable, since a
+# quarter of it would belong to the load generator.
+#
+# The "Container CPU — load generator vs system under test" panel on the
+# committed dashboard is what reads this apart.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k6-load
+  namespace: evalgate
+  labels:
+    app.kubernetes.io/name: k6-load
+    app.kubernetes.io/part-of: evalgate
+spec:
+  backoffLimit: 0 # A failed load test is a result, not something to retry.
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: k6-load
+        app.kubernetes.io/part-of: evalgate
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: k6
+          image: grafana/k6:2.1.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - run
+            - --out
+            - experimental-prometheus-rw
+            - /scripts/script.js
+          env:
+            # svclb -> traefik -> Service -> pods. The same ingress path an
+            # external caller takes; only the NSG and the internet leg sit
+            # outside it, and those are outside any in-node measurement anyway.
+            # Not the public IP: hairpin NAT works but adds a conntrack hop that
+            # would inflate latency without representing a real client.
+            - name: BASE_URL
+              value: http://10.0.0.94
+            - name: K6_TESTID
+              value: p2-load
+            - name: K6_PROMETHEUS_RW_SERVER_URL
+              value: http://monitoring-prometheus.monitoring.svc.cluster.local:9090/api/v1/write
+            # Without this k6 sends trend metrics as one aggregate and the
+            # per-endpoint percentiles never reach Prometheus.
+            - name: K6_PROMETHEUS_RW_TREND_STATS
+              value: "p(95),p(99),avg,max"
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+          resources:
+            requests:
+              cpu: 500m
+              memory: 256Mi
+            limits:
+              # Capped at one of the node's four OCPU so the generator cannot
+              # starve the thing it is measuring. The cost of that cap is stated
+              # rather than hidden: the resulting RPS is a floor on this API's
+              # capacity, not a ceiling.
+              cpu: "1"
+              memory: 512Mi
+      volumes:
+        - name: script
+          configMap:
+            # Generated from infra/k6/script.js by run.sh, so the committed file
+            # stays the single source.
+            name: k6-script
