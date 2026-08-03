@@ -1,0 +1,21 @@
+# Declared separately from the StatefulSet rather than as a volumeClaimTemplate,
+# so that deleting or rebuilding the StatefulSet cannot take the claim — and
+# with it the binding to the data — down with it.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pgdata
+  namespace: evalgate
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: evalgate
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: pgdata-local
+  resources:
+    requests:
+      storage: 45Gi
+  # Named explicitly. There is exactly one PV in this class, but binding by name
+  # means a second one can never be picked up by accident.
+  volumeName: pgdata-pv

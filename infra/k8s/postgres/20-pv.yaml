@@ -1,0 +1,32 @@
+# Static PV over the block volume created by infra/terraform/storage.tf and
+# prepared by node-volume-setup.sh. Nothing dynamically provisions this; the
+# disk is a terraform-managed resource and k8s is only told where to find it.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pgdata-pv
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: evalgate
+spec:
+  capacity:
+    # The filesystem is 49 GiB usable of the 50 GB volume after ext4 overhead.
+    # Claimed as 45Gi so the PV never advertises more space than exists.
+    storage: 45Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: pgdata-local
+  local:
+    # A subdirectory, not the mount root: ext4 puts lost+found at the root and
+    # initdb refuses a non-empty data directory.
+    path: /mnt/pgdata/data
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - evalgate-k3s

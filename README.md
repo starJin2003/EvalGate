@@ -563,6 +563,63 @@ Full design notes, the bucket setup, the console recovery path, and how to fix
 the bootstrap on a running node are in
 [infra/terraform/README.md](infra/terraform/README.md).
 
+### Postgres on a block volume
+
+The database gets its **own** 50 GB OCI block volume rather than sharing the
+50 GB boot disk through k3s's default `local-path` class. The reason is that
+this is one node: by the end of P4 the boot volume also carries containerd
+images, the Prometheus TSDB, Airflow, and Kafka log segments, all of which grow
+unattended — and the database is the one thing on the node that cannot be
+regenerated from this repo. It is free either way. The tenancy's Always Free
+allowance is 200 GB of block storage per AD, so 50 boot + 50 pgdata leaves
+100 GB for Prometheus and Kafka later.
+
+```bash
+cd infra/terraform
+export AWS_REQUEST_CHECKSUM_CALCULATION=when_required
+terraform plan     # must read: 2 to add, 0 to change, 0 to destroy
+terraform apply
+```
+
+**Check that plan line before applying.** `storage.tf` only ever *reads* the
+instance (`.id` and `.availability_domain`), so a correct plan touches nothing
+that exists. Anything other than `0 to change, 0 to destroy` means the instance
+is in the blast radius, and this shape is a capacity lottery — the instance is
+not reobtainable on demand and must never be replaced to pick up a config change.
+
+Then prepare the disk, create the password secret by hand, and deploy:
+
+```bash
+# once per volume; refuses to format a disk that already has a filesystem
+scp -i ~/.ssh/evalgate_ed25519 infra/k8s/postgres/node-volume-setup.sh ubuntu@<node-ip>:/tmp/
+ssh -i ~/.ssh/evalgate_ed25519 ubuntu@<node-ip> 'sudo bash /tmp/node-volume-setup.sh'
+
+export KUBECONFIG=~/.kube/evalgate.yaml
+kubectl apply -f infra/k8s/postgres/00-namespace.yaml
+kubectl -n evalgate create secret generic postgres-credentials \
+  --from-literal=POSTGRES_USER=evalgate \
+  --from-literal=POSTGRES_DB=evalgate \
+  --from-literal=POSTGRES_PASSWORD="$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 32)"
+
+./infra/k8s/postgres/apply.sh
+```
+
+The secret is created out-of-band and **never** committed. This repo is public,
+so a password in a manifest is a password in every fork of it, permanently.
+`apply.sh` checks that the secret exists and fails rather than generating one —
+generating it inside a repo script is the same leak one step removed, since the
+value lands in shell history and in any CI log that runs it.
+
+Deployed on 2026-08-03 in 62 s total: 41 s of `terraform apply`, ~6 s of disk
+prep, 15 s to a Ready pod. Postgres 16.14 on `aarch64` with pgvector 0.8.6 — the
+same versions as the dev compose stack. Persistence was proven rather than
+assumed: a row written by one pod was read back after `kubectl delete pod
+postgres-0`, from a pod with a new uid and `restartCount=0`, 9 s later.
+
+The full runbook — connecting, rotating the password, growing the volume, and
+the three independent guards on the data — is in
+[infra/k8s/README.md](infra/k8s/README.md).
+
 ## Repo layout
 
 | Path | What lives here | Phase |

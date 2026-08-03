@@ -1,0 +1,20 @@
+# ClusterIP, not NodePort and not LoadBalancer. Postgres is reachable from
+# inside the cluster and from an SSH tunnel, and from nowhere else — the NSG
+# opens 80 and 443 to the internet, and a database port is not going to join
+# them.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: evalgate
+  labels:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/part-of: evalgate
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres

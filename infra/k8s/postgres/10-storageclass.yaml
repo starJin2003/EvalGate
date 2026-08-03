@@ -1,0 +1,19 @@
+# A class of exactly one hand-made volume: the OCI block volume from
+# infra/terraform/storage.tf, mounted at /mnt/pgdata on the node.
+#
+# It exists mainly to keep Postgres out of the default `local-path` class.
+# local-path is Delete-reclaim, so a stray `kubectl delete pvc` there destroys
+# the data with no confirmation and no undo. Naming this class explicitly on
+# both the PV and the PVC also stops the default-StorageClass admission
+# controller from quietly substituting local-path if the PVC's class were ever
+# dropped in an edit.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: pgdata-local
+provisioner: kubernetes.io/no-provisioner
+# Retain, so deleting the PVC releases the volume instead of wiping it. Getting
+# the data back is then a manual, deliberate re-bind rather than a restore.
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: false

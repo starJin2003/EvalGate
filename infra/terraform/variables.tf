@@ -177,6 +177,26 @@ variable "boot_volume_size_in_gbs" {
   }
 }
 
+variable "pgdata_volume_size_in_gbs" {
+  description = <<-EOT
+    Size of the dedicated block volume backing the Postgres PVC. 50 is OCI's
+    minimum for a block volume, and with the 50 GB boot volume it puts the
+    tenancy at 100 of the 200 GB Always Free allowance, leaving 100 GB for the
+    Prometheus TSDB in P2 and Kafka in P4. Verified against the limits API on
+    2026-08-03: total-free-storage-gb is 200 per AD and volume-count is 10000,
+    so the free tier is capped in GB, not in number of volumes.
+
+    Expanding this is an in-place online resize; it never replaces the instance.
+  EOT
+  type        = number
+  default     = 50
+
+  validation {
+    condition     = var.pgdata_volume_size_in_gbs >= 50 && var.pgdata_volume_size_in_gbs <= 150
+    error_message = "pgdata_volume_size_in_gbs must be between 50 (the OCI minimum) and 150 (200 GB allowance minus the 50 GB boot volume)."
+  }
+}
+
 variable "ssh_public_key_path" {
   description = <<-EOT
     Path to the SSH public key injected into the ubuntu user. Defaults to a

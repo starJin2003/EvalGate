@@ -4,7 +4,7 @@ Current state of EvalGate. Read this first in every session. Update it before en
 
 Three files, three jobs. BUILD_PLAN.md is the plan and rarely changes. DECISIONS.md is an append only log of rationale and measurements. This file is mutable current state and gets overwritten freely.
 
-Last updated 2026-08-03, while v1 was training.
+Last updated 2026-08-03, while v1 was training. Last change: Postgres deployed to k3s on a dedicated OCI block volume (P2).
 
 ---
 
@@ -21,19 +21,28 @@ Last updated 2026-08-03, while v1 was training.
 | P1.2 Training | **v1 RUNNING since 2026-08-02 18:00**, 2,956 iters at 5e-5, seq 6528 + grad-checkpoint, ETA ~04:20. Probe confirmed the LR (full-split val 5.4749 → 1.0056, 81.6% drop). **v2 deliberately deferred** until the harness is verified end to end against v1 |
 | P1.3 Serving | **Pipeline proven 2026-08-03 against throwaway probe weights.** fuse → GGUF f16 → Q4_K_M (1.03 GB) → llama-server, arm64 native, 84 tok/s. Re-run against v1 when it exists |
 | P1.4 Harness | **Code landed 2026-08-03 at `66cc2e6`, 194 tests passing.** *Verified:* `LlamaServerModel` speaks the protocol against a fake server built from real captured payloads; prompt renderer unified into `evalcore.prompt` and proven byte-identical. *Not verified:* anything against a live server — no real tokenization, no context arithmetic, no judge call. Judge model now decided (gpt-5.4-mini) but **never invoked** |
-| P2 Infra | **Provisioning done 2026-08-02.** Node live, k3s up, remote state. Deploys, monitoring, and k6 not started |
+| P2 Infra | **Provisioning done 2026-08-02. Postgres deployed 2026-08-03** on a dedicated 50 GB OCI block volume, persistence proven by pod deletion. API, model server, monitoring, and k6 still not started |
 | P3 Automation | Gate workflow and threshold logic scaffolded 2026-08-01 |
 | P4 Ingestion | Not started |
 | P5 Analytics | Not started |
 | P6 Optional | Not started |
 
-**P2 is not closed.** BUILD_PLAN P2 also requires the api, Postgres on a block
-volume PVC, and the model server deployed onto k3s; kube-prometheus-stack via
-helm with `/metrics` on FastAPI and a committed Grafana dashboard JSON; and a k6
-run with recorded numbers. Its exit criterion is "`terraform apply` goes from
-zero to a running public API, dashboards live, k6 numbers recorded" — only the
-first clause holds today. What is done is everything up to and including a
-Ready k3s node reachable on 80/443.
+**P2 is not closed.** Its exit criterion is "`terraform apply` goes from zero to
+a running public API, dashboards live, k6 numbers recorded." Of BUILD_PLAN P2's
+four build items:
+
+| P2 item | Status |
+|---|---|
+| Terraform: VCN/subnet/NSG/instance, cloud-init k3s | **Done 2026-08-02** |
+| Deploy **Postgres** with a block volume PVC | **Done 2026-08-03** |
+| Deploy the **api** onto k3s | Not started. Needs a container image; `apps/api/` still uses `MemoryStore`, with Postgres DDL written in `store.py` but never run |
+| Deploy the **quantized model server** onto k3s | Not started. Blocked on v1 finishing and the P1.3 pipeline re-running against real weights |
+| kube-prometheus-stack + `/metrics` on FastAPI + committed dashboard JSON | Not started |
+| k6 script, run and recorded | Not started |
+
+The database now exists and is empty. Nothing writes to it yet — that arrives
+with the api deploy, whose `store.py` DDL for `suites` / `runs` / `baselines` has
+been written since P1.4 and has never been executed against a real server.
 
 ## 2. Locked decisions
 
@@ -77,7 +86,12 @@ Fill this in as artifacts land. A new session should be able to read this sectio
 - `infra/terraform/` is real as of P2. `versions.tf` (provider, `~/.oci/config` auth), `variables.tf`, `main.tf` (data-source lookups for the existing VCN and subnet, NSG plus rules, the instance), `outputs.tf`, `backend.tf` + `backend.hcl.example` (remote state), `cloud-init/k3s.yaml.tftpl`, `retry-apply.sh`, `terraform.tfvars.example`, and a committed `.terraform.lock.hcl` pinning oracle/oci 8.25.0
 - `retry-apply.sh` is the A1 capacity retry loop: cycles availability domains by index, classifies failures as capacity / throttle / fatal, backs off 3 min between ADs and 15 min per cycle with exponential backoff from 30 min on a 429, logs every attempt with a UTC timestamp to gitignored `logs/`. Refuses to run below 4 OCPU without `--allow-downsize`, and exits 0 early if an instance is already in state
 - `cloud-init/k3s.yaml.tftpl` installs k3s and opens the host iptables ports OCI's Ubuntu image blocks by default. POSIX sh only, because cloud-init runs `runcmd` under dash
-- `infra/k8s/`, `workers/`, and `analytics/` are still README placeholders and are not packaged yet
+- **`infra/terraform/storage.tf` is the Postgres disk.** `oci_core_volume.pgdata` (50 GB, VPU 10, `is_auto_tune_enabled = false`, `prevent_destroy`) plus a **paravirtualized** `oci_core_volume_attachment`. Both are strictly additive — the instance is only ever *read* (`.id`, `.availability_domain`), never modified. The AD comes from the instance rather than `local.availability_domain`, because that local is derived from `retry-apply.sh`'s AD cursor and can point somewhere the instance is not. Volume OCID is `terraform output pgdata_volume_id`
+- **`infra/k8s/postgres/` is live.** `node-volume-setup.sh` (idempotent `mkfs.ext4` + `/etc/fstab` by `LABEL=pgdata` + mount at `/mnt/pgdata`; hard-stops rather than formatting a disk that already has a filesystem), then `00-namespace` / `10-storageclass` (`pgdata-local`, `no-provisioner`, `Retain`) / `20-pv` (static `local` PV over `/mnt/pgdata/data`, node-affine, `Retain`) / `30-pvc` / `40-statefulset` / `50-service` (ClusterIP `postgres:5432`), plus `apply.sh`
+- **The init-SQL ConfigMap is generated, not committed.** `apply.sh` builds it from `infra/postgres/init/` — the same directory the dev compose stack mounts — so the cluster and the dev stack cannot drift on which extensions a fresh database gets
+- **The Postgres password is a Kubernetes secret created out-of-band and is not in the repo.** `apply.sh` checks `secret/postgres-credentials` exists and **fails rather than creating it**; the create command is in `infra/k8s/README.md`. `POSTGRES_PASSWORD` is read only by `initdb` on a first boot, so rotating the secret alone does nothing — it needs `ALTER ROLE` too
+- Running on the node: `postgres-0`, `pgvector/pgvector:pg16`, **PostgreSQL 16.14 `aarch64`, pgvector 0.8.6**, requests 250m/512Mi, limits 2 CPU/2Gi. **The database is empty** — no schema has been applied to it yet
+- `workers/` and `analytics/` are still README placeholders and are not packaged yet
 
 ## 4. Environment state
 
@@ -99,6 +113,8 @@ Fill this in as artifacts land. A new session should be able to read this sectio
 
 - **Instance live.** `evalgate-k3s`, `VM.Standard.A1.Flex` at **4 OCPU / 24 GB**, 50 GB boot, `jSVO:US-CHICAGO-1-AD-1`, public `64.181.195.241`, private `10.0.0.94`, OCID `...xyefrpsq`. Image `Canonical-Ubuntu-24.04-aarch64-2026.06.29-0`
 - **k3s v1.36.2+k3s1**, node Ready, 7/7 system pods healthy including traefik and svclb. containerd 2.3.2-k3s2, kernel 6.17.0-1018-oracle aarch64
+- **Block storage: 100 GB of the 200 GB Always Free allowance used.** 50 GB boot (`/dev/sda`, VPU 10) plus 50 GB `evalgate-k3s-pgdata` (`/dev/sdb`, VPU 10, paravirtualized, AD-1), mounted at `/mnt/pgdata` by `LABEL=pgdata` with `_netdev,nofail`. **100 GB left** for the Prometheus TSDB and P4's Kafka. Verified from the limits API: `total-free-storage-gb` 200 per AD, `volume-count` 10000 — the free tier is capped in GB, not in number of volumes
+- **Node at idle with Postgres up (2026-08-03):** 1,432 MB used of 23,974 MB, 22,542 MB available, no swap, load 0.59. Boot disk 4.9 GB of 48 GB (11%), pgdata 46 MB of 49 GB (1%)
 - **The 4 OCPU / 24 GB PAYG allowance is confirmed real**, not the feared 2/12. This is the verification BUILD_PLAN section 12 made the Kafka sizing decision wait on, so that decision is now unblocked
 - **Network exposure.** 22 open to the operator `/32` only (`admin_cidr`); 80 and 443 open to the internet via a separate `public_ingress_cidr`, deliberately public because P3's gate is called by GitHub Actions runners; **6443 has no ingress rule at all**. kubectl goes through an SSH tunnel: `terraform output kubectl_tunnel_command`
 - **If your IP changes you are not locked out.** Edit the port 22 rule on the `evalgate-k3s-nsg` security group in the OCI console from any browser, then update `admin_cidr`. Never rebuild the instance to regain access; the shape is a capacity lottery
@@ -133,12 +149,19 @@ Anything waiting on a human goes here so a fresh session does not silently work 
 - Kafka memory budget and single versus dual instance was deferred until that verification. **The verification is done, so this decision is now unblocked** and can be made whenever P4 starts. It still needs a human
 - **A1 capacity is a lottery and this instance is not replaceable on demand.** All three ADs were returning "Out of capacity" hours before it launched. Never `terraform destroy` or taint the instance to pick up a config change. `ignore_changes` covers the image OCID and `metadata["user_data"]` for exactly this reason; bootstrap fixes are applied to the live node over SSH and land in the template for the next build
 - The retry loop's capacity and throttle branches have **never executed against a live OCI error**. It succeeded on attempt 1, so those paths are still only tested against recorded error strings and the dry-run harness. Treat the backoff timings as unvalidated if the loop is ever needed for real
+- **OPEN: the Postgres volume has no backup.** Three guards stop it being *deleted* — `prevent_destroy` on the terraform volume, `Retain` on both the PV and the StorageClass, and `node-volume-setup.sh` refusing to format a disk that already has a filesystem — but none of those is a backup, and corruption or a bad migration is not covered. The tenancy has **5 free OCI volume backups** available (`terraform output pgdata_volume_id`). Low urgency while the database is empty; this becomes real the moment P4 writes traces that are not in `recovery.jsonl`
+- **The block volume's disk prep is not in cloud-init and cannot be.** `node-volume-setup.sh` runs by hand over SSH because `user_data` executes only at first boot and this instance will never boot fresh again. If the instance is ever lost, restoring means: launch, run the bootstrap, run that script, re-attach the volume, recreate the secret. Written down because it is exactly the step a rebuild would forget
 - Databricks Free Edition external access path for pushing files and running dbt from outside is unverified. Check at the start of P5
 - `pre-commit run --all-files` reported nothing before the first commit because the scaffold was untracked. Resolved, hooks engage from the first commit onward
 
 ## 7. Next action
 
-Two independent threads.
+Two independent threads. **Thread A (local, M1)** is blocked on wall-clock — v1 is
+training and there is nothing to do but wait. **Thread B (OCI)** is where work can
+actually proceed right now, and it costs the Mac nothing: everything runs on the
+node through the SSH tunnel. See "Thread B" below.
+
+### Thread A — v1 training on the M1
 
 **v1 is running. The next action is to wait, then select its checkpoint.** Launched 2026-08-02 18:00 with exactly this command:
 
@@ -210,6 +233,44 @@ uv run python -m mlx_lm lora --model mlx-community/Qwen3-1.7B-8bit \
   --iters 2956 --steps-per-eval 200 --val-batches 25 --save-every 200 \
   --adapter-path training/artifacts/adapters-v1
 ```
+
+### Thread B — P2 on OCI
+
+Postgres landed 2026-08-03. **The next P2 item is the api deploy**, and it is the
+one that unblocks everything else: `apps/api/` still runs on `MemoryStore`, and
+the Postgres DDL in `store.py` has never been executed against a real server, so
+the database currently sitting on the block volume is empty.
+
+In dependency order:
+
+1. **api → k3s.** Needs, in this order: a `PostgresStore` behind the existing
+   `Store` protocol; the `store.py` DDL actually run against `postgres.evalgate.svc`;
+   an arm64 container image (**built on the node or in CI, not on this Mac** —
+   Docker is on the prohibition list while v1 trains); a Deployment, Service, and
+   traefik Ingress on port 80. This is what makes the P2 exit criterion's "running
+   public API" true.
+2. **kube-prometheus-stack** via helm, `/metrics` on FastAPI, committed dashboard
+   JSON. Size it against the 22.5 GB free measured at idle.
+3. **Model server → k3s.** Blocked on Thread A: needs v1's selected checkpoint
+   through the P1.3 pipeline first.
+4. **k6** against the API, numbers recorded. Last item; P2 does not close without it.
+
+Reaching the cluster, every time:
+
+```bash
+cd infra/terraform && export AWS_REQUEST_CHECKSUM_CALCULATION=when_required
+eval "$(terraform output -raw kubectl_tunnel_command)" &   # leave running
+export KUBECONFIG=~/.kube/evalgate.yaml
+kubectl -n evalgate get pod,svc,pvc
+```
+
+Two things a fresh session will otherwise get wrong. The **password secret is not
+in the repo** — read it from the cluster (`kubectl -n evalgate get secret
+postgres-credentials -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d`), and if
+it is somehow gone, recreate it *and* `ALTER ROLE`, because `POSTGRES_PASSWORD` is
+only read by `initdb` on a first boot. And any `terraform plan` touching the
+instance must read **`0 to change, 0 to destroy`** before you apply — the A1 shape
+is a capacity lottery and the instance is not reobtainable.
 
 ---
 
