@@ -4,7 +4,7 @@ Current state of EvalGate. Read this first in every session. Update it before en
 
 Three files, three jobs. BUILD_PLAN.md is the plan and rarely changes. DECISIONS.md is an append only log of rationale and measurements. This file is mutable current state and gets overwritten freely.
 
-Last updated 2026-08-03, while v1 was training. Last change: Postgres deployed to k3s on a dedicated OCI block volume (P2).
+Last updated 2026-08-03, while v1 was training. Last change: `apps/api` deployed to k3s, Postgres-backed and public at `http://64.181.195.241` (P2).
 
 ---
 
@@ -21,7 +21,7 @@ Last updated 2026-08-03, while v1 was training. Last change: Postgres deployed t
 | P1.2 Training | **v1 RUNNING since 2026-08-02 18:00**, 2,956 iters at 5e-5, seq 6528 + grad-checkpoint, ETA ~04:20. Probe confirmed the LR (full-split val 5.4749 → 1.0056, 81.6% drop). **v2 deliberately deferred** until the harness is verified end to end against v1 |
 | P1.3 Serving | **Pipeline proven 2026-08-03 against throwaway probe weights.** fuse → GGUF f16 → Q4_K_M (1.03 GB) → llama-server, arm64 native, 84 tok/s. Re-run against v1 when it exists |
 | P1.4 Harness | **Code landed 2026-08-03 at `66cc2e6`, 194 tests passing.** *Verified:* `LlamaServerModel` speaks the protocol against a fake server built from real captured payloads; prompt renderer unified into `evalcore.prompt` and proven byte-identical. *Not verified:* anything against a live server — no real tokenization, no context arithmetic, no judge call. Judge model now decided (gpt-5.4-mini) but **never invoked** |
-| P2 Infra | **Provisioning done 2026-08-02. Postgres deployed 2026-08-03** on a dedicated 50 GB OCI block volume, persistence proven by pod deletion. API, model server, monitoring, and k6 still not started |
+| P2 Infra | **Provisioning done 2026-08-02. Postgres + API deployed 2026-08-03.** Postgres on a dedicated 50 GB block volume; the API is public at `http://64.181.195.241`, Postgres-backed, 2 replicas. Model server, monitoring, and k6 still not started |
 | P3 Automation | Gate workflow and threshold logic scaffolded 2026-08-01 |
 | P4 Ingestion | Not started |
 | P5 Analytics | Not started |
@@ -35,14 +35,19 @@ four build items:
 |---|---|
 | Terraform: VCN/subnet/NSG/instance, cloud-init k3s | **Done 2026-08-02** |
 | Deploy **Postgres** with a block volume PVC | **Done 2026-08-03** |
-| Deploy the **api** onto k3s | Not started. Needs a container image; `apps/api/` still uses `MemoryStore`, with Postgres DDL written in `store.py` but never run |
+| Deploy the **api** onto k3s | **Done 2026-08-03.** Public on port 80 via traefik, Postgres-backed, 2 replicas |
 | Deploy the **quantized model server** onto k3s | Not started. Blocked on v1 finishing and the P1.3 pipeline re-running against real weights |
 | kube-prometheus-stack + `/metrics` on FastAPI + committed dashboard JSON | Not started |
 | k6 script, run and recorded | Not started |
 
-The database now exists and is empty. Nothing writes to it yet — that arrives
-with the api deploy, whose `store.py` DDL for `suites` / `runs` / `baselines` has
-been written since P1.4 and has never been executed against a real server.
+**The "running public API" clause of the exit criterion now holds.**
+`http://64.181.195.241` answers `/health`, `/ready`, `/suites`, `/runs`,
+`/diff`, and `/gate` from the internet, and the gate returned a correct `fail`
+verdict end to end through traefik, two pods, Postgres, and the block volume.
+What remains for P2 is the model server, dashboards, and k6.
+
+The application database is **empty on purpose**: the verification data was
+deleted after it was recorded. The tables exist, created by the app at startup.
 
 ## 2. Locked decisions
 
@@ -81,7 +86,12 @@ Fill this in as artifacts land. A new session should be able to read this sectio
 - **`packages/evalcore/src/evalcore/model.py` is the real `ModelClient`.** `LlamaServerModel(version, quantization)` → `ref` like `llama-server:v1:Q4_K_M`. Stdlib `urllib`, temperature 0, `chat_template_kwargs: {"enable_thinking": false}` explicit. Raises `ContextOverflowError` (carrying `n_prompt_tokens` and `n_ctx`) or `ModelError`; `run_case` turns both into per-case errors. 16 tests against a threaded `http.server` replaying payloads captured from the real llama-server
 - `packages/evalcore/` is the harness: `schema.py` (suite, case, thresholds, results), `scorers.py` (exact, regex, citation, refusal), `judge.py` (provider abstraction, SQLite cache keyed on case+output+rubric+judge version, full-jitter backoff), `runner.py` (`ModelClient` protocol plus `StubModel`/`EchoContextModel`), `diff.py` (case deltas and the breach logic), `report.py` (terminal, markdown PR comment, self-contained HTML), `loader.py`, `cli.py`
 - `evalgate-eval` CLI: `build-suite` from the golden export, `run`, `gate`. Exit 1 from `gate` is the merge block
-- `apps/api/` v0: register suites, submit runs, list runs, explicit baseline promotion per (suite, branch), `/diff`, and `/suites/{id}/gate` returning the verdict plus PR comment. `MemoryStore` now, Postgres DDL written in `store.py` for P2
+- `apps/api/` v0: register suites, submit runs, list runs, explicit baseline promotion per (suite, branch), `/diff`, and `/suites/{id}/gate` returning the verdict plus PR comment. **Live on k3s since 2026-08-03**
+- **`store.py` now has `PostgresStore` alongside `MemoryStore`.** psycopg 3 with a `ConnectionPool`; `body` JSONB is the source of truth and the scalar `version` / `model_ref` / `score` columns are a denormalised cache written from the model. `build_store()` picks Postgres when `DATABASE_URL` is set and memory otherwise, so CI and unit tests need no database. **Both implementations must raise the same exceptions** — `app.py` maps `KeyError`→404 and `ValueError`→400 — and `apps/api/tests/test_store.py` runs one parametrised set of assertions against both
+- **The schema is created by the app at startup**, from the `SCHEMA` constant, under `pg_advisory_xact_lock`. The lock is required at 2 replicas: `CREATE TABLE IF NOT EXISTS` is not atomic against a concurrent creator. **This is not a migration system** — the first schema change after P4 has real data needs Alembic
+- **`apps/api/Dockerfile` is a 3-stage build**: `builder` (uv sync, `--frozen --no-dev --no-editable --package evalgate-api`), `test` (adds dev deps and runs pytest in-cluster), `runtime`. Builder and runtime share the same `python:3.12-slim-bookworm` base because the copied venv is bound to its interpreter path. Build context is the **repo root**, not `apps/api/`, since evalcore is a workspace sibling
+- **`apps/api` requires `psycopg[binary,pool]`.** The `pool` extra was added 2026-08-03; `uv.lock` was updated with `uv lock` **and never `uv sync`**, because syncing without `--group mlx` would delete mlx-lm out from under the live training run
+- `.dockerignore` at the repo root excludes `training/.scratch` (9.5 GB) and `training/artifacts` (244 MB, actively written by the training run), plus every secret-bearing pattern
 - `.github/workflows/eval-gate.yml` scaffolded: builds the suite, runs the candidate, restores the judge cache, comments the diff (updating one sticky comment), uploads the report, fails on a breach
 - `infra/terraform/` is real as of P2. `versions.tf` (provider, `~/.oci/config` auth), `variables.tf`, `main.tf` (data-source lookups for the existing VCN and subnet, NSG plus rules, the instance), `outputs.tf`, `backend.tf` + `backend.hcl.example` (remote state), `cloud-init/k3s.yaml.tftpl`, `retry-apply.sh`, `terraform.tfvars.example`, and a committed `.terraform.lock.hcl` pinning oracle/oci 8.25.0
 - `retry-apply.sh` is the A1 capacity retry loop: cycles availability domains by index, classifies failures as capacity / throttle / fatal, backs off 3 min between ADs and 15 min per cycle with exponential backoff from 30 min on a 429, logs every attempt with a UTC timestamp to gitignored `logs/`. Refuses to run below 4 OCPU without `--allow-downsize`, and exits 0 early if an instance is already in state
@@ -91,6 +101,11 @@ Fill this in as artifacts land. A new session should be able to read this sectio
 - **The init-SQL ConfigMap is generated, not committed.** `apply.sh` builds it from `infra/postgres/init/` — the same directory the dev compose stack mounts — so the cluster and the dev stack cannot drift on which extensions a fresh database gets
 - **The Postgres password is a Kubernetes secret created out-of-band and is not in the repo.** `apply.sh` checks `secret/postgres-credentials` exists and **fails rather than creating it**; the create command is in `infra/k8s/README.md`. `POSTGRES_PASSWORD` is read only by `initdb` on a first boot, so rotating the secret alone does nothing — it needs `ALTER ROLE` too
 - Running on the node: `postgres-0`, `pgvector/pgvector:pg16`, **PostgreSQL 16.14 `aarch64`, pgvector 0.8.6**, requests 250m/512Mi, limits 2 CPU/2Gi. **The database is empty** — no schema has been applied to it yet
+- **`infra/k8s/api/` is live.** `node-build-setup.sh` (installs nerdctl 2.3.5 + buildkit 0.32.0 on the node and runs buildkitd as a systemd unit with a **containerd worker in the `k8s.io` namespace**), `build-on-node.sh` (streams the build context over SSH as a tar and builds there), `10-deployment` / `20-service` / `30-ingress`, and `apply.sh`
+- **There is no registry.** Images live only in the node's containerd, in the `k8s.io` namespace — kubelet looks nowhere else, so an image built into `default` is invisible while `ctr images list` still shows it. Tag is explicit `:0.1.0` with `imagePullPolicy: IfNotPresent`; **never `:latest`**, which implicitly forces `Always` and sends kubelet to Docker Hub
+- **Two secrets, both created out-of-band and neither in the repo**: `postgres-credentials` and `evalgate-api-token`. The API composes `DATABASE_URL` in the manifest from three individual `secretKeyRef` env vars — **not `envFrom`**, because k8s `$(VAR)` expansion cannot see variables injected that way
+- **Writes are token-guarded, reads are open.** `PUT /suites`, `POST /runs`, `POST /baseline` need `Authorization: Bearer $EVALGATE_API_TOKEN`; `/health`, `/ready`, reads, and `/gate` do not. With no token configured writes return **503, not open access**
+- **`evalgate_test` is a throwaway database on the same server** for the Postgres store tests, which `TRUNCATE` on teardown. The fixture aborts the run unless `current_database()` ends in `_test` — see the 2026-08-03 Problems row for why that guard exists
 - `workers/` and `analytics/` are still README placeholders and are not packaged yet
 
 ## 4. Environment state
@@ -114,7 +129,9 @@ Fill this in as artifacts land. A new session should be able to read this sectio
 - **Instance live.** `evalgate-k3s`, `VM.Standard.A1.Flex` at **4 OCPU / 24 GB**, 50 GB boot, `jSVO:US-CHICAGO-1-AD-1`, public `64.181.195.241`, private `10.0.0.94`, OCID `...xyefrpsq`. Image `Canonical-Ubuntu-24.04-aarch64-2026.06.29-0`
 - **k3s v1.36.2+k3s1**, node Ready, 7/7 system pods healthy including traefik and svclb. containerd 2.3.2-k3s2, kernel 6.17.0-1018-oracle aarch64
 - **Block storage: 100 GB of the 200 GB Always Free allowance used.** 50 GB boot (`/dev/sda`, VPU 10) plus 50 GB `evalgate-k3s-pgdata` (`/dev/sdb`, VPU 10, paravirtualized, AD-1), mounted at `/mnt/pgdata` by `LABEL=pgdata` with `_netdev,nofail`. **100 GB left** for the Prometheus TSDB and P4's Kafka. Verified from the limits API: `total-free-storage-gb` 200 per AD, `volume-count` 10000 — the free tier is capped in GB, not in number of volumes
-- **Node at idle with Postgres up (2026-08-03):** 1,432 MB used of 23,974 MB, 22,542 MB available, no swap, load 0.59. Boot disk 4.9 GB of 48 GB (11%), pgdata 46 MB of 49 GB (1%)
+- **Node with Postgres and 2 API replicas (2026-08-03):** 1,526 MB used of 23,974 MB, 22,448 MB available, no swap, load 0.29. Boot disk 5.9 GB of 48 GB (13%), pgdata 46 MB of 49 GB (1%). API pods measure 42 MiB and 2 m CPU each
+- **The node is now also the build machine.** nerdctl 2.3.5 and buildkit 0.32.0 installed 2026-08-03; `buildkitd.service` runs with `--containerd-worker-addr=/run/k3s/containerd/containerd.sock --containerd-worker-namespace=k8s.io` and `--oci-worker=false`. Builds are native aarch64 — no buildx, no QEMU. Build context lands in `/home/ubuntu/build/evalgate-api`
+- **`http://64.181.195.241` is live and public.** traefik Ingress, HTTP only. TLS needs a DNS name — Let's Encrypt will not issue for a bare IP — so it waits for P6's Cloudflare item
 - **The 4 OCPU / 24 GB PAYG allowance is confirmed real**, not the feared 2/12. This is the verification BUILD_PLAN section 12 made the Kafka sizing decision wait on, so that decision is now unblocked
 - **Network exposure.** 22 open to the operator `/32` only (`admin_cidr`); 80 and 443 open to the internet via a separate `public_ingress_cidr`, deliberately public because P3's gate is called by GitHub Actions runners; **6443 has no ingress rule at all**. kubectl goes through an SSH tunnel: `terraform output kubectl_tunnel_command`
 - **If your IP changes you are not locked out.** Edit the port 22 rule on the `evalgate-k3s-nsg` security group in the OCI console from any browser, then update `admin_cidr`. Never rebuild the instance to regain access; the shape is a capacity lottery
@@ -149,6 +166,9 @@ Anything waiting on a human goes here so a fresh session does not silently work 
 - Kafka memory budget and single versus dual instance was deferred until that verification. **The verification is done, so this decision is now unblocked** and can be made whenever P4 starts. It still needs a human
 - **A1 capacity is a lottery and this instance is not replaceable on demand.** All three ADs were returning "Out of capacity" hours before it launched. Never `terraform destroy` or taint the instance to pick up a config change. `ignore_changes` covers the image OCID and `metadata["user_data"]` for exactly this reason; bootstrap fixes are applied to the live node over SSH and land in the template for the next build
 - The retry loop's capacity and throttle branches have **never executed against a live OCI error**. It succeeded on attempt 1, so those paths are still only tested against recorded error strings and the dry-run harness. Treat the backoff timings as unvalidated if the loop is ever needed for real
+- **OPEN: `store.py`'s startup DDL is not a migration system.** `CREATE TABLE IF NOT EXISTS` silently does nothing against an existing table, so the first schema *change* after P4 puts real trace data in Postgres needs Alembic. That is the trigger; before then, version tracking buys nothing
+- **OPEN: the API has no `/metrics`.** kube-prometheus-stack is the next P2 item and instrumenting FastAPI is part of it
+- **OPEN: the public API is HTTP only.** TLS needs a DNS name, since Let's Encrypt will not issue for `64.181.195.241`. Writes are token-guarded so credentials do not cross the wire in the clear, but the bearer token itself does. Fix with P6's Cloudflare item, or earlier with a free `sslip.io`-style name plus cert-manager if P3 wants HTTPS
 - **OPEN: the Postgres volume has no backup.** Three guards stop it being *deleted* — `prevent_destroy` on the terraform volume, `Retain` on both the PV and the StorageClass, and `node-volume-setup.sh` refusing to format a disk that already has a filesystem — but none of those is a backup, and corruption or a bad migration is not covered. The tenancy has **5 free OCI volume backups** available (`terraform output pgdata_volume_id`). Low urgency while the database is empty; this becomes real the moment P4 writes traces that are not in `recovery.jsonl`
 - **The block volume's disk prep is not in cloud-init and cannot be.** `node-volume-setup.sh` runs by hand over SSH because `user_data` executes only at first boot and this instance will never boot fresh again. If the instance is ever lost, restoring means: launch, run the bootstrap, run that script, re-attach the volume, recreate the secret. Written down because it is exactly the step a rebuild would forget
 - Databricks Free Edition external access path for pushing files and running dbt from outside is unverified. Check at the start of P5
@@ -236,24 +256,25 @@ uv run python -m mlx_lm lora --model mlx-community/Qwen3-1.7B-8bit \
 
 ### Thread B — P2 on OCI
 
-Postgres landed 2026-08-03. **The next P2 item is the api deploy**, and it is the
-one that unblocks everything else: `apps/api/` still runs on `MemoryStore`, and
-the Postgres DDL in `store.py` has never been executed against a real server, so
-the database currently sitting on the block volume is empty.
+Postgres and the API both landed 2026-08-03. **The next P2 item is
+kube-prometheus-stack**, which is the only remaining one not blocked on Thread A.
 
 In dependency order:
 
-1. **api → k3s.** Needs, in this order: a `PostgresStore` behind the existing
-   `Store` protocol; the `store.py` DDL actually run against `postgres.evalgate.svc`;
-   an arm64 container image (**built on the node or in CI, not on this Mac** —
-   Docker is on the prohibition list while v1 trains); a Deployment, Service, and
-   traefik Ingress on port 80. This is what makes the P2 exit criterion's "running
-   public API" true.
-2. **kube-prometheus-stack** via helm, `/metrics` on FastAPI, committed dashboard
-   JSON. Size it against the 22.5 GB free measured at idle.
+1. **kube-prometheus-stack** via helm, `/metrics` on FastAPI (the app has no
+   instrumentation yet), and a committed Grafana dashboard JSON. Size it against
+   the 22.4 GB free measured with Postgres and both API pods running. It will
+   want a PVC for the TSDB — put it on `local-path`, not the block volume, since
+   metrics are regenerable and the 100 GB of remaining free allowance is better
+   kept for P4's Kafka.
+2. **k6** against `http://64.181.195.241`. Reads and `/gate` need no token, so the
+   script needs no credential. Record RPS, p95, error rate, and node CPU/RAM
+   under load — the idle baseline is already in DECISIONS.
 3. **Model server → k3s.** Blocked on Thread A: needs v1's selected checkpoint
-   through the P1.3 pipeline first.
-4. **k6** against the API, numbers recorded. Last item; P2 does not close without it.
+   through the P1.3 pipeline first. Reuse `build-on-node.sh`; the pattern is
+   proven now.
+
+P2 closes when 1–3 are done. Nothing here needs the Mac.
 
 Reaching the cluster, every time:
 
@@ -261,16 +282,34 @@ Reaching the cluster, every time:
 cd infra/terraform && export AWS_REQUEST_CHECKSUM_CALCULATION=when_required
 eval "$(terraform output -raw kubectl_tunnel_command)" &   # leave running
 export KUBECONFIG=~/.kube/evalgate.yaml
-kubectl -n evalgate get pod,svc,pvc
+kubectl -n evalgate get pod,svc,ingress,pvc
+curl -sS http://64.181.195.241/ready
 ```
 
-Two things a fresh session will otherwise get wrong. The **password secret is not
-in the repo** — read it from the cluster (`kubectl -n evalgate get secret
-postgres-credentials -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d`), and if
-it is somehow gone, recreate it *and* `ALTER ROLE`, because `POSTGRES_PASSWORD` is
-only read by `initdb` on a first boot. And any `terraform plan` touching the
-instance must read **`0 to change, 0 to destroy`** before you apply — the A1 shape
-is a capacity lottery and the instance is not reobtainable.
+Rebuilding and redeploying the API after a code change:
+
+```bash
+./infra/k8s/api/build-on-node.sh                      # ~24 s, native arm64 on the node
+KUBECONFIG=~/.kube/evalgate.yaml EVALGATE_NODE_SSH="ssh -i ~/.ssh/evalgate_ed25519 ubuntu@64.181.195.241" \
+  ./infra/k8s/api/apply.sh
+kubectl -n evalgate rollout restart deployment/evalgate-api   # same tag, so force it
+```
+
+Four things a fresh session will otherwise get wrong.
+
+- **Neither secret is in the repo.** Read them from the cluster:
+  `kubectl -n evalgate get secret postgres-credentials -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d`,
+  same shape for `evalgate-api-token`. If `postgres-credentials` is ever
+  recreated you must also `ALTER ROLE` — `POSTGRES_PASSWORD` is read only by
+  `initdb`, on a first boot.
+- **The image tag never changes**, so `kubectl apply` alone will not restart pods
+  after a rebuild. Use `rollout restart`.
+- **Never point `EVALGATE_TEST_DATABASE_URL` at `evalgate`.** The store tests
+  `TRUNCATE` on teardown. Use `evalgate_test`; the fixture now refuses anything
+  whose name does not end in `_test`.
+- Any `terraform plan` touching the instance must read **`0 to change, 0 to
+  destroy`** before you apply — the A1 shape is a capacity lottery and the
+  instance is not reobtainable.
 
 ---
 

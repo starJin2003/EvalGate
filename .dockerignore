@@ -1,0 +1,35 @@
+# The build context is the repo root. Two directories here are enormous and
+# would dominate the upload: training/.scratch is 9.5 GB of vendored docs and
+# GGUF scratch, and training/artifacts is 244 MB of adapters and datasets —
+# which is also being written to right now by a live training run.
+training/.scratch/
+training/artifacts/
+training/tests/
+
+.venv/
+**/.venv/
+.git/
+.github/
+.pytest_cache/
+.ruff_cache/
+**/__pycache__/
+**/*.pyc
+
+# Nothing secret should ever reach a build layer, whether or not the Dockerfile
+# copies it.
+.env
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+backend.hcl
+infra/terraform/.terraform/
+infra/terraform/logs/
+
+# Docs and local-only tooling contribute nothing to a runtime image.
+*.md
+!README.md
+docker-compose.dev.yml
+.pre-commit-config.yaml
+analytics/
+workers/

@@ -1,0 +1,36 @@
+# The one deliberately public surface. Port 80 was opened on the NSG at
+# provisioning time for exactly this: from P3 the eval gate is called by GitHub
+# Actions runners, whose egress addresses cannot be usefully allowlisted, so the
+# API is public by design rather than by default.
+#
+# HTTP only. TLS needs a DNS name — Let's Encrypt will not issue for a bare IP,
+# and this node has 64.181.195.241 and nothing else. That waits for P6's
+# Cloudflare item rather than being faked with a self-signed cert every client
+# has to be told to ignore.
+#
+# Writes are guarded by a bearer token inside the app (EVALGATE_API_TOKEN).
+# Reads, /health, /ready, and /gate stay open so k6 and the P3 demo need no
+# credential.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: evalgate-api
+  namespace: evalgate
+  labels:
+    app.kubernetes.io/name: evalgate-api
+    app.kubernetes.io/part-of: evalgate
+spec:
+  # k3s ships traefik and svclb, which is what puts this on the node's :80.
+  ingressClassName: traefik
+  rules:
+    # No host match: the node is reached by bare IP, and a host rule would make
+    # every request 404 until a DNS name exists.
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: evalgate-api
+                port:
+                  number: 80

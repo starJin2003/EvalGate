@@ -6,7 +6,7 @@ Lands across P2 and P3.
 | Directory | Status |
 |---|---|
 | `postgres/` | **Live as of 2026-08-03.** Postgres 16.14 + pgvector 0.8.6 on a dedicated OCI block volume |
-| api | Not built yet (P2) |
+| `api/` | **Live as of 2026-08-03.** 2 replicas, Postgres-backed, public on port 80 via traefik |
 | model server | Not built yet (P2) |
 | kube-prometheus-stack | Not built yet (P2) |
 | airflow | Not built yet (P3) |
@@ -156,6 +156,154 @@ kubectl -n evalgate rollout status statefulset/postgres --timeout=300s
 kubectl -n evalgate exec -i postgres-0 -- psql -U evalgate -d evalgate \
   -c "SELECT * FROM t;" -c "DROP TABLE t;"
 ```
+
+---
+
+## api/
+
+`apps/api` on k3s: 2 replicas, backed by the Postgres above, published on port 80
+through traefik at `http://64.181.195.241`.
+
+| File | What it is |
+|---|---|
+| `node-build-setup.sh` | One-time, on the node: installs nerdctl + BuildKit and runs `buildkitd` as a systemd unit against k3s's containerd |
+| `build-on-node.sh` | Streams the build context over SSH and builds the image on the node |
+| `10-deployment.yaml` | 2 replicas, `evalgate-api:0.1.0`, `IfNotPresent` |
+| `20-service.yaml` | ClusterIP `evalgate-api:80` |
+| `30-ingress.yaml` | traefik Ingress, no host match, HTTP |
+| `apply.sh` | Checks preconditions, applies, waits for the rollout |
+
+### There is no registry
+
+The image exists only in the node's containerd, **in the `k8s.io` namespace**.
+That namespace is not a detail: containerd namespaces are hard isolation and
+kubelet looks in `k8s.io` and nowhere else, so an image built into `default` is
+invisible to k3s while `ctr images list` cheerfully shows it present. Both
+`buildkitd` and `nerdctl` are pointed at `k8s.io` explicitly.
+
+Two tag traps follow from having no registry. `imagePullPolicy: Always` sends
+kubelet to Docker Hub for `docker.io/library/evalgate-api` and lands in
+`ImagePullBackOff`; and **a `:latest` tag implicitly forces `Always`** whatever
+the manifest says. So the tag is an explicit `:0.1.0` and the policy is
+`IfNotPresent` — which also survives the eventual move to GHCR unchanged, where
+`Never` would not.
+
+Builds are **native**. The node is aarch64 and the image is aarch64: no buildx,
+no QEMU, no emulation. Nothing is ever built on the dev machine.
+
+### First-time setup
+
+```bash
+# 1. Install the builder on the node. Once.
+scp -i ~/.ssh/evalgate_ed25519 infra/k8s/api/node-build-setup.sh ubuntu@<node-ip>:/tmp/
+ssh -i ~/.ssh/evalgate_ed25519 ubuntu@<node-ip> 'sudo bash /tmp/node-build-setup.sh'
+
+# 2. Create the write token, out-of-band, exactly like the DB password.
+export KUBECONFIG=~/.kube/evalgate.yaml
+kubectl -n evalgate create secret generic evalgate-api-token \
+  --from-literal=EVALGATE_API_TOKEN="$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 40)"
+
+# 3. Build on the node, then deploy.
+./infra/k8s/api/build-on-node.sh
+EVALGATE_NODE_SSH="ssh -i ~/.ssh/evalgate_ed25519 ubuntu@<node-ip>" ./infra/k8s/api/apply.sh
+```
+
+### Redeploying after a code change
+
+The tag does not change between builds, so `kubectl apply` sees no diff and will
+not restart anything. Force it:
+
+```bash
+./infra/k8s/api/build-on-node.sh
+kubectl -n evalgate rollout restart deployment/evalgate-api
+kubectl -n evalgate rollout status deployment/evalgate-api
+```
+
+### Authentication
+
+Writes need a bearer token; reads, `/health`, `/ready`, and `/gate` do not — so
+k6 and the P3 demo need no credential.
+
+```bash
+TOKEN=$(kubectl -n evalgate get secret evalgate-api-token \
+  -o jsonpath='{.data.EVALGATE_API_TOKEN}' | base64 -d)
+
+curl http://64.181.195.241/suites                                  # open
+curl -X PUT http://64.181.195.241/suites/demo \
+  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d @suite.json
+```
+
+With no token configured the write endpoints return **503**, not open access. An
+unset credential disabling writes is the only safe default for a service on a
+public port.
+
+### Configuration
+
+`DATABASE_URL` is assembled in the Deployment from three `secretKeyRef` env vars
+rather than injected with `envFrom`. That is required, not stylistic:
+Kubernetes `$(VAR)` expansion only sees variables defined earlier in the *same*
+`env` list, and anything from `envFrom` is invisible to it — `DATABASE_URL` would
+be set to the literal string `$(POSTGRES_USER)`.
+
+The app picks its store from the environment: `DATABASE_URL` set means Postgres,
+unset means in-memory. Tests and CI therefore need no database and no flag.
+
+The schema is created at startup from `store.py`'s `SCHEMA`, under a Postgres
+advisory lock — required, because `CREATE TABLE IF NOT EXISTS` is not atomic
+against a concurrent creator and both replicas start at once. **This is not a
+migration system.** The first schema change after P4 has real data needs Alembic.
+
+### Running the tests against real Postgres
+
+The `PostgresStore` half of `apps/api/tests/test_store.py` needs a live database,
+which only exists on this node, so the tests run inside the cluster:
+
+```bash
+PW=$(kubectl -n evalgate get secret postgres-credentials \
+  -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d)
+
+ssh -i ~/.ssh/evalgate_ed25519 ubuntu@<node-ip> \
+  "cd /home/ubuntu/build/evalgate-api && sudo nerdctl --address /run/k3s/containerd/containerd.sock \
+   --namespace k8s.io build --target test -f apps/api/Dockerfile -t evalgate-api:0.1.0-test ."
+
+kubectl -n evalgate run api-tests --rm -i --restart=Never \
+  --image=evalgate-api:0.1.0-test --image-pull-policy=IfNotPresent \
+  --env="EVALGATE_TEST_DATABASE_URL=postgresql://evalgate:${PW}@postgres.evalgate.svc.cluster.local:5432/evalgate_test" \
+  --command -- pytest apps/api -q -p no:cacheprovider
+```
+
+**`evalgate_test`, never `evalgate`.** Fixture teardown runs
+`TRUNCATE baselines, runs, suites CASCADE`, so pointing that variable at the
+application database destroys everything in it — which is exactly what happened
+the first time these ran. The fixture now reads `current_database()` and aborts
+the run unless the name ends in `_test`, but the habit is the real protection.
+
+Note that this passes the password on a command line, so it lands in the pod spec
+until the pod is removed. `--rm` deletes it when the run finishes.
+
+### Verifying
+
+```bash
+curl http://64.181.195.241/health     # {"status":"ok"}   liveness, no DB
+curl http://64.181.195.241/ready      # {"status":"ready"} readiness, queries Postgres
+```
+
+To prove the state really is in Postgres rather than in process memory, write
+through the Service and then read back from **each pod individually** — under an
+in-memory store the two would disagree:
+
+```bash
+for p in $(kubectl -n evalgate get pods -l app.kubernetes.io/name=evalgate-api \
+             -o jsonpath='{.items[*].metadata.name}'); do
+  echo "--- $p"
+  kubectl -n evalgate exec "$p" -- /app/.venv/bin/python -c \
+    "import json,urllib.request;print(json.load(urllib.request.urlopen('http://127.0.0.1:8000/suites')))"
+done
+```
+
+---
+
+## postgres/, continued
 
 ### Growing the volume
 

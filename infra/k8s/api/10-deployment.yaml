@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evalgate-api
+  namespace: evalgate
+  labels:
+    app.kubernetes.io/name: evalgate-api
+    app.kubernetes.io/part-of: evalgate
+spec:
+  # Two, and not for capacity — the node has 4 OCPU and this API is idle most of
+  # the time. Two replicas are what make "the state is in Postgres" checkable:
+  # with MemoryStore, a suite written through the Service would be visible from
+  # one pod and absent from the other. Reading it back from both is the proof.
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: evalgate-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: evalgate-api
+        app.kubernetes.io/part-of: evalgate
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+      containers:
+        - name: api
+          # Built on the node into containerd's k8s.io namespace. There is no
+          # registry, so the tag must be explicit and never `latest`: a `latest`
+          # tag defaults imagePullPolicy to Always regardless of what is set
+          # below, which sends kubelet to Docker Hub for an image that only
+          # exists locally and lands in ImagePullBackOff.
+          image: evalgate-api:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            # Individually, via secretKeyRef, rather than the envFrom block
+            # Postgres uses. This is load-bearing: k8s `$(VAR)` expansion only
+            # sees variables defined earlier in this same list, and variables
+            # injected by envFrom are invisible to it — DATABASE_URL below would
+            # interpolate to the literal string "$(POSTGRES_USER)".
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_PASSWORD
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: POSTGRES_DB
+            # Composed here from the three above, so the password reaches the
+            # app without ever appearing as a value in a committed file. The
+            # generated password is alphanumeric by construction, so it needs no
+            # percent-encoding inside a URL.
+            - name: DATABASE_URL
+              value: postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres.evalgate.svc.cluster.local:5432/$(POSTGRES_DB)
+            # Guards the mutating endpoints. Absent, writes return 503 rather
+            # than running open.
+            - name: EVALGATE_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: evalgate-api-token
+                  key: EVALGATE_API_TOKEN
+          # Postgres is already up, but the pool opens lazily and the schema is
+          # created on startup under an advisory lock that the two replicas
+          # contend for. The startup probe covers that without making liveness
+          # permissive afterwards.
+          startupProbe:
+            httpGet:
+              path: /ready
+              port: http
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            # Hits the database. A pod that cannot reach Postgres leaves the
+            # Service rather than serving 500s.
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            # Does NOT hit the database, on purpose. If liveness depended on
+            # Postgres, a database blip would restart every API pod at once and
+            # turn a recoverable outage into a crash loop.
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            # readOnlyRootFilesystem is otherwise absolute, and anything that
+            # reaches for a temp file gets EROFS.
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

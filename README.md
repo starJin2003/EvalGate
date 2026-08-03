@@ -620,6 +620,66 @@ The full runbook — connecting, rotating the password, growing the volume, and
 the three independent guards on the data — is in
 [infra/k8s/README.md](infra/k8s/README.md).
 
+### The API, and building without a registry
+
+`apps/api` runs on the same cluster, backed by that Postgres, and is public at
+**http://64.181.195.241**.
+
+k3s ships containerd, not Docker, and there is no registry in the budget or the
+plan. So the image is built **on the node**, natively for its own aarch64, and
+written straight into k3s's containerd:
+
+```bash
+./infra/k8s/api/node-build-setup.sh   # once: nerdctl + BuildKit on the node
+./infra/k8s/api/build-on-node.sh      # ~24 s, streams the context over SSH
+```
+
+BuildKit runs with a containerd worker pointed at `/run/k3s/containerd/containerd.sock`
+in namespace **`k8s.io`**, so a finished build is immediately visible to kubelet
+with no `docker save`, no tarball, and no import step.
+
+That namespace is the thing to get right. containerd namespaces are hard
+isolation and kubelet only ever looks in `k8s.io` — an image built into `default`
+is invisible to k3s while `ctr images list` still shows it sitting there. Two
+more traps come with having no registry: `imagePullPolicy: Always` sends kubelet
+to Docker Hub for an image that only exists locally, and **a `:latest` tag
+implicitly forces `Always`** regardless of the manifest. Hence an explicit
+`:0.1.0` tag with `IfNotPresent`, which also survives a later move to GHCR that
+`Never` would not.
+
+Nothing is built on the dev machine. It is an M1 with a 9-hour training run on
+it, and an image build is exactly the memory and IO spike that has already cost
+this project one run.
+
+```bash
+export KUBECONFIG=~/.kube/evalgate.yaml
+kubectl -n evalgate create secret generic evalgate-api-token \
+  --from-literal=EVALGATE_API_TOKEN="$(LC_ALL=C tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 40)"
+
+EVALGATE_NODE_SSH="ssh -i ~/.ssh/evalgate_ed25519 ubuntu@<node-ip>" ./infra/k8s/api/apply.sh
+```
+
+**Writes need a bearer token; reads do not.** `PUT /suites`, `POST /runs`, and
+baseline promotion require `Authorization: Bearer $EVALGATE_API_TOKEN`;
+`/health`, `/ready`, the read endpoints, and `/gate` are open, so k6 and the P3
+demo need no credential. The port is public by design — the P3 gate is called by
+GitHub Actions runners whose egress cannot be allowlisted — and an unauthenticated
+write endpoint on a public port is a free database-filling service for anything
+that scans it. With no token configured, writes return 503 rather than running
+open. HTTP only for now: Let's Encrypt will not issue for a bare IP, so TLS waits
+for a DNS name.
+
+Deployed on 2026-08-03: 24 s build, 210 MB image, 6 s to 2/2 replicas Ready,
+42 MiB per pod. Verified over the public internet — unauthenticated write 401,
+authenticated write 201, and `POST /gate` returning `verdict: fail` with a −0.5
+delta and a breach on `adversarial`, through traefik, two pods, Postgres, and the
+block volume.
+
+The state is in Postgres, and that was proven rather than assumed: the same data
+read back **identically from both replicas individually**, which an in-memory
+store could not do, then read back again over public HTTP after every API pod was
+deleted.
+
 ## Repo layout
 
 | Path | What lives here | Phase |

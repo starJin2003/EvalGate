@@ -8,14 +8,18 @@ reimplemented in CI shell.
 
 from __future__ import annotations
 
+import os
+import secrets
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel
 
 from evalcore import RunResult, Suite, compare, markdown_comment
 
-from .store import MemoryStore, Store
+from .store import MemoryStore, PostgresStore, Store
 
 
 class PromoteRequest(BaseModel):
@@ -28,19 +32,73 @@ class GateRequest(BaseModel):
     branch: str = "main"
 
 
-def create_app(store: Store | None = None) -> FastAPI:
-    app = FastAPI(title="EvalGate API", version="0.1.0")
-    app.state.store = store or MemoryStore()
+def build_store() -> Store:
+    """Postgres when DATABASE_URL is set, memory otherwise.
+
+    Presence of the variable is the whole switch. CI and every unit test get
+    MemoryStore without configuring anything; the k8s Deployment sets
+    DATABASE_URL and gets Postgres. Nothing has to remember to flip a mode flag.
+    """
+    url = os.environ.get("DATABASE_URL", "").strip()
+    return PostgresStore(url) if url else MemoryStore()
+
+
+def create_app(store: Store | None = None, write_token: str | None = None) -> FastAPI:
+    resolved_store = store if store is not None else build_store()
+    token = write_token if write_token is not None else os.environ.get("EVALGATE_API_TOKEN", "")
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        init = getattr(app.state.store, "init_schema", None)
+        if init is not None:
+            init()
+        yield
+        close = getattr(app.state.store, "close", None)
+        if close is not None:
+            close()
+
+    app = FastAPI(title="EvalGate API", version="0.1.0", lifespan=lifespan)
+    app.state.store = resolved_store
+    app.state.write_token = token
 
     def db() -> Store:
         return app.state.store
 
+    def require_write(authorization: str = Header(default="")) -> None:
+        """Guards every endpoint that mutates state.
+
+        Fails closed. With no token configured the writes are refused outright
+        rather than left open, because the alternative — treating "unset" as
+        "unauthenticated access is fine" — turns one forgotten environment
+        variable into a public write endpoint on an internet-facing service.
+        """
+        expected = app.state.write_token
+        if not expected:
+            raise HTTPException(503, "write token is not configured; writes are disabled")
+        scheme, _, presented = authorization.partition(" ")
+        # Constant time, so a wrong token cannot be recovered a byte at a time
+        # from response latency.
+        if scheme.lower() != "bearer" or not secrets.compare_digest(presented, expected):
+            raise HTTPException(401, "missing or invalid bearer token")
+
     @app.get("/health")
     def health() -> dict[str, str]:
+        """Liveness. Deliberately does not touch the database — a Postgres
+        outage should take pods out of the Service, not restart them in a loop."""
         return {"status": "ok"}
 
+    @app.get("/ready")
+    def ready() -> dict[str, str]:
+        """Readiness. Does touch the database, because a pod that cannot reach
+        Postgres has nothing useful to serve and should leave the endpoints."""
+        try:
+            db().ping()
+        except Exception as exc:  # noqa: BLE001 - probe reports any failure the same way
+            raise HTTPException(503, f"database unreachable: {type(exc).__name__}") from exc
+        return {"status": "ready"}
+
     # --- suites ---------------------------------------------------------------
-    @app.put("/suites/{suite_id}", status_code=201)
+    @app.put("/suites/{suite_id}", status_code=201, dependencies=[Depends(require_write)])
     def register_suite(suite_id: str, suite: Suite) -> dict[str, Any]:
         if suite.suite_id != suite_id:
             raise HTTPException(400, f"body declares {suite.suite_id}, path says {suite_id}")
@@ -62,7 +120,7 @@ def create_app(store: Store | None = None) -> FastAPI:
         return suite
 
     # --- runs -----------------------------------------------------------------
-    @app.post("/runs", status_code=201)
+    @app.post("/runs", status_code=201, dependencies=[Depends(require_write)])
     def submit_run(run: RunResult) -> dict[str, Any]:
         if db().get_suite(run.suite_id) is None:
             raise HTTPException(404, f"unknown suite {run.suite_id}")
@@ -94,7 +152,7 @@ def create_app(store: Store | None = None) -> FastAPI:
         return run
 
     # --- baselines ------------------------------------------------------------
-    @app.post("/suites/{suite_id}/baseline", status_code=201)
+    @app.post("/suites/{suite_id}/baseline", status_code=201, dependencies=[Depends(require_write)])
     def promote(suite_id: str, req: PromoteRequest) -> dict[str, Any]:
         try:
             baseline = db().promote(suite_id, req.branch, req.run_id)
@@ -118,6 +176,9 @@ def create_app(store: Store | None = None) -> FastAPI:
         d = compare(suite, base, cand)
         return _diff_payload(d)
 
+    # Not behind require_write. It is a POST for the request body, but it reads
+    # and returns a verdict without mutating anything, and leaving it open is
+    # what lets k6 load-test the realistic path in P2 without a credential.
     @app.post("/suites/{suite_id}/gate")
     def gate(suite_id: str, req: GateRequest) -> dict[str, Any]:
         """The merge decision. A missing baseline passes: the first run on a new
