@@ -1,0 +1,36 @@
+# Scrape llama-server's own Prometheus metrics (enabled by --metrics in
+# 40-deployment.yaml). Applied separately because it needs the ServiceMonitor
+# CRD; apply.sh skips this file when the CRD is absent, so the model server
+# still deploys on a cluster without kube-prometheus-stack.
+#
+# Worth having rather than optional: llama-server exports prompt and generation
+# token counts and per-request timings, which are the tok/s numbers this project
+# otherwise has to read out of a log by hand. Once P3's DAG runs nightly, a
+# prefill rate that has quietly halved is the early signal that something on the
+# node changed, and it shows up here without anyone instrumenting the DAG.
+#
+# Scraped on the SAME port as inference (8080), unlike the API, which puts
+# /metrics on its own port. That asymmetry is deliberate: the API is publicly
+# routed and had to keep /metrics off the public listener, while this service is
+# ClusterIP-only with no Ingress, so there is no public listener to keep it off.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: evalgate-model
+  namespace: evalgate
+  labels:
+    app.kubernetes.io/name: evalgate-model
+    app.kubernetes.io/part-of: evalgate
+    # The Prometheus instance selects on this label, set explicitly in the
+    # monitoring values.yaml rather than the chart's release-name default.
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames: [evalgate]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: evalgate-model
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

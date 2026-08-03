@@ -507,6 +507,11 @@ plus answer; at serve time the prompt alone reaches 6,357 tokens. A prompt over 
 limit returns HTTP 400 `exceed_context_size_error` naming both counts — it fails
 loudly rather than truncating silently, which is what the harness needs.
 
+**This artifact now runs in production.** The same GGUF is deployed to the OCI
+node — see [The model server](#the-model-server) under P2. The numbers above are
+the M1's; the node is CPU-only Ampere and roughly an order of magnitude slower,
+which is why the eval DAG is a nightly batch rather than anything interactive.
+
 ## The gate (P1.4 + P3)
 
 The harness is built against a stubbed model, so the whole merge-blocking path is
@@ -844,6 +849,41 @@ counts asserted afterwards — **no `TRUNCATE`, no `DROP`, no `CASCADE`**. That 
 written the way it is because a test fixture pointed at this same database
 earlier and truncated rows it had not created.
 
+### The model server
+
+The last P2 build item, and the one that unblocks P3's daily DAG. llama.cpp
+`b10210` compiled **on the node** for aarch64 — same pattern as the API and
+Airflow images, no buildx, no QEMU — serving the Q4_K_M GGUF over an
+OpenAI-compatible endpoint at `evalgate-model.evalgate.svc.cluster.local:8080`.
+
+Full operational detail is in [`infra/k8s/README.md`](infra/k8s/README.md#model).
+Three things worth pulling up to here, because each is a decision rather than a
+configuration:
+
+**The weights are on the boot volume, not the Postgres block volume.** They are
+re-derivable — the committed adapters plus this pipeline reproduce the exact
+sha256 — and the database is not, and has no backup. A 1 GB file that rebuilds
+in 32 s does not belong inside the blast radius of the one volume that cannot be
+lost. `node-model-setup.sh` refuses to run if the two resolve to the same device,
+so this is enforced rather than remembered.
+
+**The digest is verified twice, and the second time is on every pod start.** A
+truncated 1 GB GGUF still loads and still answers; it just answers wrong. That
+failure arrives at the eval harness disguised as a model regression, which is
+the most expensive possible way to find a bad upload — so the initContainer
+re-checks the hash against a ConfigMap generated from `gguf_manifest.json`, and
+a mismatch is a refusal to start rather than a wrong score.
+
+**The thread count is set explicitly, because the default is wrong here.**
+Kubernetes does not virtualize `/proc/cpuinfo`: inside the pod
+`Cpus_allowed_list` is `0-3`, so llama.cpp's auto-detect resolves to 4 threads,
+while the CPU *limit* is a CFS quota of 250 ms per 100 ms period. Four compute
+threads ask for 4000m against 2500m, and the excess is not paid as a smooth
+slowdown — the quota runs out mid-period and every thread in the pod freezes,
+including the one answering `/health`, while ggml's spin-barrier burns what
+quota is left waiting at a barrier. The value in the manifest comes from a sweep
+run inside that exact cgroup against a rule fixed before the numbers existed.
+
 ## Repo layout
 
 | Path | What lives here | Phase |
@@ -855,6 +895,7 @@ earlier and truncated rows it had not created.
 | `training/` | Corpus parsing, question generation, retrieval, teacher answers | P1.1 |
 | `infra/terraform/` | OCI provisioning, plus `retry-apply.sh` for the A1 capacity lottery | P2 |
 | `infra/k8s/` | k3s manifests, helm values, and the committed Grafana dashboard | P2 |
+| `infra/k8s/model/` | llama.cpp image built on the node, weight upload + digest gate, thread sweep | P2 |
 | `infra/k6/` | Load test: script, in-cluster Job, seed and scoped teardown | P2 |
 | `infra/postgres/init/` | Dev Postgres init SQL (pgvector) | P0 |
 | `analytics/` | Export DAG helpers, Spark jobs, dbt project | P5 |

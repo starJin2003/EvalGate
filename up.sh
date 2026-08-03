@@ -37,6 +37,16 @@ TF_DIR="$REPO_ROOT/infra/terraform"
 KUBECONFIG_PATH="${EVALGATE_KUBECONFIG:-$HOME/.kube/evalgate.yaml}"
 API_IMAGE="${EVALGATE_API_IMAGE:-evalgate-api:0.1.0}"
 AIRFLOW_IMAGE="${EVALGATE_AIRFLOW_IMAGE:-evalgate-airflow:3.2.2-dags}"
+MODEL_IMAGE="${EVALGATE_MODEL_IMAGE:-evalgate-llama-server:b10210}"
+
+# The model server is the one component this script cannot bring up from a
+# fresh clone alone, and it says so rather than failing obscurely. It needs two
+# gitignored artifacts that are outputs of P1.2/P1.3 on an Apple Silicon
+# machine: the llama.cpp source tarball the image is built from, and the ~1 GB
+# quantized GGUF. Both are reproducible - see README P1.3 - but neither is in
+# git, so on a machine that has not run the training pipeline the model steps
+# below skip with an explanation instead of dying.
+MODEL_SRC="$REPO_ROOT/training/.scratch/llamacpp/src.tar.gz"
 
 STEP=0
 step() { STEP=$((STEP + 1)); printf '\n\033[1m[%d/9] %s\033[0m\n' "$STEP" "$*"; }
@@ -296,6 +306,16 @@ step "Build the API image — on the node, natively for aarch64"
   | grep -vE "LIBARCHIVE|^#[0-9]+ (CACHED|extracting|sha256|transferring|DONE|resolve)" \
   | sed 's/^/      /' || true
 
+# llama.cpp for the model server. Compiles from the pinned b10210 source on the
+# node - ~4.5 min cold, a BuildKit cache hit thereafter.
+if [ -f "$MODEL_SRC" ]; then
+  ./infra/k8s/model/build-on-node.sh "$MODEL_IMAGE" 2>&1 \
+    | grep -vE "LIBARCHIVE|^#[0-9]+ (CACHED|extracting|sha256|transferring|DONE|resolve)" \
+    | sed 's/^/      /' || true
+else
+  log "model server: skipped, ${MODEL_SRC#"$REPO_ROOT"/} is absent (see README P1.3)"
+fi
+
 # ==============================================================================
 step "Deploy — postgres, then monitoring, then api"
 # ==============================================================================
@@ -309,6 +329,29 @@ step "Deploy — postgres, then monitoring, then api"
 ./infra/k8s/postgres/apply.sh   2>&1 | sed 's/^/      /'
 ./infra/k8s/monitoring/apply.sh 2>&1 | sed 's/^/      /'
 ./infra/k8s/api/apply.sh        2>&1 | sed 's/^/      /'
+
+# --- model server -------------------------------------------------------------
+#
+# After api and before airflow: it lives in the evalgate namespace postgres
+# created, wants the ServiceMonitor CRD monitoring installed, and is a
+# dependency of the daily eval DAG rather than of the public API.
+#
+# Gated on the weights actually being on the node. Applying without them gives
+# Init:CrashLoopBackOff from the digest check - which is the correct behaviour
+# for a corrupt file, but a confusing one for a file that was simply never
+# uploaded, so the distinction is drawn here.
+MODEL_GGUF="$(python3 -c "
+import json
+print(json.load(open('training/artifacts/p13/gguf_manifest.json'))['artifact'])
+" 2>/dev/null || true)"
+
+if [ -n "$MODEL_GGUF" ] && $EVALGATE_NODE_SSH "test -f /var/lib/evalgate/models/${MODEL_GGUF}" 2>/dev/null; then
+  # EVALGATE_NODE_SSH is already exported above, so apply.sh inherits it.
+  ./infra/k8s/model/apply.sh 2>&1 | sed 's/^/      /'
+else
+  log "model server: skipped, weights are not on the node"
+  log "  ./infra/k8s/model/node-model-setup.sh && ./infra/k8s/model/upload-weights.sh"
+fi
 
 # --- airflow, last ------------------------------------------------------------
 #

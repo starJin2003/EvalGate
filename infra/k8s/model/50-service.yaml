@@ -1,0 +1,28 @@
+# ClusterIP only, and deliberately no Ingress.
+#
+# The 30-ingress.yaml next door puts the API on the public internet because
+# P3's gate is called by GitHub Actions runners. This service must NOT follow
+# that precedent: llama-server has no authentication of any kind, and exposing
+# it would put an unauthenticated inference endpoint - CPU-expensive by nature,
+# on a node whose binding constraint is CPU - on a bare public IP.
+#
+# The consumers are all in-cluster: P3's daily DAG and the eval Job both reach
+# http://evalgate-model.evalgate.svc.cluster.local:8080. From the workstation
+# it is an SSH tunnel, the same precedent as 6443 and Grafana.
+apiVersion: v1
+kind: Service
+metadata:
+  name: evalgate-model
+  namespace: evalgate
+  labels:
+    app.kubernetes.io/name: evalgate-model
+    app.kubernetes.io/part-of: evalgate
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: evalgate-model
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP

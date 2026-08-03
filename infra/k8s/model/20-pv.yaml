@@ -1,0 +1,40 @@
+# Static PV over /var/lib/evalgate on the BOOT volume, prepared by
+# node-model-setup.sh. Holds the quantized GGUF and the eval suite inputs.
+#
+# Same shape as postgres/20-pv.yaml - a `local` PV rather than hostPath - for
+# the node-affinity guarantee. hostPath would be six lines instead of thirty and
+# works fine today, but it binds to whatever node the pod lands on; this cluster
+# already carries one documented single-node assumption (the Airflow RWO logs
+# PVC) and a second silent one is not worth the saving.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: evalgate-models-pv
+  labels:
+    app.kubernetes.io/name: evalgate-model
+    app.kubernetes.io/part-of: evalgate
+spec:
+  capacity:
+    # Advisory only - a local PV over a shared filesystem enforces no quota, the
+    # same caveat already recorded for local-path on this cluster. 5Gi is what
+    # the claim asks for, not a bound. Actual contents are the 1,056 MiB GGUF
+    # plus a 1.3 MB suite, against 35 GB free on /dev/sda1.
+    storage: 5Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: models-local
+  local:
+    # The parent of models/ and eval/, so one PV serves both the weights the
+    # server reads and the suite the eval Job reads. Both are mounted readOnly
+    # by their consumers.
+    path: /var/lib/evalgate
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - evalgate-k3s

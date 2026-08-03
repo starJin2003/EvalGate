@@ -77,6 +77,13 @@ training/artifacts/adapters-v1-selected/
 *.sqlite3
 training/artifacts/**/judge.sqlite
 
+# Raw per-arm output of the thread sweep. Redundant: bench-threads.sh folds
+# every arm into thread_sweep.json alongside the rule and the winner, and THAT
+# file is committed on purpose — it is the measurement the -t value in
+# 40-deployment.yaml rests on, same reasoning as probe_v1_losses.jsonl. The raw
+# file exists only so a crashed sweep does not lose completed arms.
+training/artifacts/p13/thread_sweep_raw.jsonl
+
 # Built suites: a rendering of the committed golden_set.jsonl, verified
 # byte-identical on rebuild (`build-suite`, ~1 s). Same rule as the dataset
 # splits -- commit the definition and a digest, not the rendering. The sha256

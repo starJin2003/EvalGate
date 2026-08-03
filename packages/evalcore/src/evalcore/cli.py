@@ -43,6 +43,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             version=args.model_version,
             quantization=args.quantization,
             base_url=args.server_url,
+            timeout_s=args.timeout_s,
         )
     elif args.outputs:
         model = StubModel(json.loads(Path(args.outputs).read_text()), ref=args.model_ref)
@@ -122,6 +123,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="weights id baked into model_ref; use something that names the checkpoint",
     )
     r.add_argument("--quantization", default="Q4_K_M")
+    r.add_argument(
+        "--timeout-s",
+        type=float,
+        default=180.0,
+        help=(
+            "per-case HTTP timeout against --server-url. The 180s default is sized for "
+            "GPU-backed serving; CPU-only inference on the OCI node needs more, because a "
+            "timeout there records a per-case error that is indistinguishable from a model "
+            "failure in the run artifact"
+        ),
+    )
     r.add_argument("--run-id")
     r.add_argument("--judge", action="store_true")
     r.add_argument("--judge-cache")

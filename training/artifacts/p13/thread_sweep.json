@@ -1,0 +1,95 @@
+{
+  "rule": "lowest median wall time per case; tie within 5% to the lower thread count",
+  "arms": [
+    {
+      "arm": "3",
+      "n_threads_reported": "3",
+      "median_wall_s": 79.312,
+      "walls_s": [
+        77.888,
+        79.312,
+        82.824
+      ],
+      "prefill_tok_s": 36.91,
+      "gen_tok_s": 7.95,
+      "prompt_tokens": 7178,
+      "generated_tokens": 360,
+      "cfs_nr_throttled": 2179,
+      "cfs_throttled_usec": 37803667,
+      "cfs_nr_periods": 2405,
+      "cfs_throttled_pct": 90.6
+    },
+    {
+      "arm": "4",
+      "n_threads_reported": "4",
+      "median_wall_s": 79.368,
+      "walls_s": [
+        76.617,
+        79.368,
+        102.591
+      ],
+      "prefill_tok_s": 37.29,
+      "gen_tok_s": 6.73,
+      "prompt_tokens": 7178,
+      "generated_tokens": 443,
+      "cfs_nr_throttled": 2454,
+      "cfs_throttled_usec": 121015566,
+      "cfs_nr_periods": 2592,
+      "cfs_throttled_pct": 94.68
+    },
+    {
+      "arm": "auto",
+      "n_threads_reported": "4",
+      "median_wall_s": 81.168,
+      "walls_s": [
+        79.996,
+        81.168,
+        99.474
+      ],
+      "prefill_tok_s": 37.29,
+      "gen_tok_s": 6.55,
+      "prompt_tokens": 7178,
+      "generated_tokens": 443,
+      "cfs_nr_throttled": 2435,
+      "cfs_throttled_usec": 111111478,
+      "cfs_nr_periods": 2617,
+      "cfs_throttled_pct": 93.05
+    },
+    {
+      "arm": "2",
+      "n_threads_reported": "2",
+      "median_wall_s": 97.52,
+      "walls_s": [
+        93.127,
+        97.52,
+        109.219
+      ],
+      "prefill_tok_s": 30.49,
+      "gen_tok_s": 6.67,
+      "prompt_tokens": 7178,
+      "generated_tokens": 428,
+      "cfs_nr_throttled": 0,
+      "cfs_throttled_usec": 0,
+      "cfs_nr_periods": 3003,
+      "cfs_throttled_pct": 0.0
+    }
+  ],
+  "winner": {
+    "arm": "3",
+    "n_threads_reported": "3",
+    "median_wall_s": 79.312,
+    "walls_s": [
+      77.888,
+      79.312,
+      82.824
+    ],
+    "prefill_tok_s": 36.91,
+    "gen_tok_s": 7.95,
+    "prompt_tokens": 7178,
+    "generated_tokens": 360,
+    "cfs_nr_throttled": 2179,
+    "cfs_throttled_usec": 37803667,
+    "cfs_nr_periods": 2405,
+    "cfs_throttled_pct": 90.6
+  }
+}

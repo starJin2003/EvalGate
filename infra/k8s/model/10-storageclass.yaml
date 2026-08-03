@@ -1,0 +1,24 @@
+# Storage class for the model weights on the node's BOOT volume.
+#
+# Same shape as postgres/10-storageclass.yaml and for the same two reasons:
+# no-provisioner because the directory is prepared out-of-band by
+# node-model-setup.sh, and Retain so deleting the PVC never deletes weights that
+# took a 1 GB upload to place.
+#
+# Deliberately a SEPARATE class from pgdata-local rather than a reuse. The two
+# back different physical devices - this one /dev/sda1, pgdata /dev/sdb - and a
+# single class spanning both would make the volume a PV-level detail rather than
+# something the class name states. See node-model-setup.sh for why the weights
+# must not land on the Postgres volume.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: models-local
+provisioner: kubernetes.io/no-provisioner
+# The directory exists before any pod does, so there is nothing to wait for.
+# Immediate would also work on one node; WaitForFirstConsumer is what keeps this
+# correct if a second node ever joins, since the PV below is node-affine and a
+# pod scheduled elsewhere must not bind it.
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+allowVolumeExpansion: false

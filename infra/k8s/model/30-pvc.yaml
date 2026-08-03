@@ -1,0 +1,18 @@
+# Claim on the static models PV. Bound by storageClassName plus capacity; there
+# is exactly one PV in the models-local class, so the binding is unambiguous.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: evalgate-models
+  namespace: evalgate
+  labels:
+    app.kubernetes.io/name: evalgate-model
+    app.kubernetes.io/part-of: evalgate
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: models-local
+  resources:
+    requests:
+      storage: 5Gi
+  volumeName: evalgate-models-pv

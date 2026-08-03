@@ -8,8 +8,8 @@ Lands across P2 and P3.
 | `postgres/` | **Live as of 2026-08-03.** Postgres 16.14 + pgvector 0.8.6 on a dedicated OCI block volume |
 | `api/` | **Live as of 2026-08-03.** 2 replicas, Postgres-backed, public on port 80 via traefik |
 | `monitoring/` | **Live as of 2026-08-03.** kube-prometheus-stack 88.1.3, 5 pods, 592 Mi, committed dashboard |
-| model server | Not built yet (P2) |
-| airflow | Not built yet (P3) |
+| `model/` | **Live as of 2026-08-03.** llama.cpp b10210, Qwen3-1.7B v1 iter2000 Q4_K_M, CPU-only, ClusterIP |
+| `airflow/` | **Live as of 2026-08-03.** Chart 1.22.0 / appVersion 3.2.2, LocalExecutor, 4 pods |
 
 ---
 
@@ -438,6 +438,101 @@ kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-passwor
 When judging cardinality, use the per-job series count rather than
 `prometheus_tsdb_head_series` — head keeps stale series for up to two hours after
 a relabel change, so it lags by design.
+
+---
+
+## model/
+
+llama.cpp `b10210` serving `evalgate-qwen3-1.7b-v1-iter2000.Q4_K_M.gguf` on CPU.
+ClusterIP only, one replica, consumed in-cluster by P3's daily eval DAG.
+
+### Deploy order
+
+The weights come first. Everything else fails loudly without them.
+
+```bash
+export KUBECONFIG=~/.kube/evalgate.yaml
+export EVALGATE_NODE_SSH="ssh -i ~/.ssh/evalgate_ed25519 ubuntu@<node-ip>"
+
+./infra/k8s/model/node-model-setup.sh    # create dirs, refuse if they land on pgdata
+./infra/k8s/model/upload-weights.sh      # rsync ~1 GB, verify sha256, delete on mismatch
+./infra/k8s/model/build-on-node.sh       # compile llama.cpp on the node, aarch64 native
+./infra/k8s/model/apply.sh               # SC, PV, PVC, Deployment, Service, ServiceMonitor
+./infra/k8s/model/smoke.sh 3             # 3 real suite cases end to end
+```
+
+`up.sh` runs the build and apply steps too, but **skips both** when the
+gitignored artifacts are absent, because neither the GGUF nor the llama.cpp
+source tarball is in git.
+
+### Where the weights live, and where they must not
+
+`/var/lib/evalgate/models/` on the **boot volume** (`/dev/sda1`), exposed
+through a static node-affine `local` PV and mounted `readOnly`.
+
+Not on `/mnt/pgdata` (`/dev/sdb`), and `node-model-setup.sh` refuses to run if
+they resolve to the same device. The weights are re-derivable — committed
+adapters plus the P1.3 pipeline rebuild this exact sha256 — and the database is
+not, and has no backup. A 1 GB file that rebuilds in 32 s does not belong inside
+the blast radius of the one volume this project cannot lose.
+
+Not in the image either: a 1 GB layer rebuilt on every llama.cpp bump, for a
+file whose identity is already pinned by a digest.
+
+### The digest is checked twice
+
+`upload-weights.sh` verifies after transfer and **deletes the file** on a
+mismatch. The Deployment then re-verifies in an initContainer on **every pod
+start**, from a ConfigMap generated out of `training/artifacts/p13/gguf_manifest.json`
+so the hash has exactly one source.
+
+The second check is the one that matters long-term. A truncated 1 GB GGUF still
+loads and still answers — it just answers wrong — and a wrong answer arrives at
+the eval harness looking like a model regression, which is the most expensive
+possible way to discover a bad upload.
+
+### Threads
+
+`-t` is set explicitly and the value is a measurement, not a preference.
+
+Inside the pod, `Cpus_allowed_list` is `0-3` and four CPUs are visible, so
+llama.cpp's auto-detect (`-t -1`) resolves to **4** — Kubernetes does not
+virtualize `/proc/cpuinfo`, and the CPU *limit* is enforced as a CFS quota
+(`cpu.max` = `250000 100000`, i.e. 250 ms per 100 ms period), not as an
+affinity mask. Four compute threads therefore ask for 4000m against a 2500m
+quota.
+
+`bench-threads.sh` sweeps `auto/2/3/4` inside that exact cgroup against a rule
+committed before any number existed, and records CFS throttling per arm from the
+container's own `/sys/fs/cgroup/cpu.stat`. Thread count does not change output —
+ggml partitions matmul by output row, so no reduction is split across threads —
+so the sweep is safe to run before a score comparison.
+
+### Probes
+
+All three are `httpGet /health`; none is `tcpSocket`.
+
+Measured rather than assumed: on b10210 the listening socket is **not** opened
+until the model is loaded, so a restarting pod gives connection-refused for
+~24 s and then `200 {"status":"ok"}`. There is no 503 "loading model" window in
+this configuration, so a `tcpSocket` probe would not actually go ready early
+here. `httpGet` stays because that startup order is an implementation detail
+rather than a contract, and because a CPU-starved HTTP thread holds the socket
+open while answering nothing — which `tcpSocket` passes and `httpGet` does not.
+
+`apply.sh` additionally asserts `/props` reports the intended `model_path` and
+`n_ctx`, which no probe can: a server that loaded the *wrong* GGUF passes every
+health check there is.
+
+### Reaching it from a workstation
+
+No Ingress, deliberately — llama-server has no authentication and inference is
+the most CPU-expensive thing this node can be asked to do.
+
+```bash
+kubectl -n evalgate port-forward svc/evalgate-model 8080:8080
+curl -s localhost:8080/health
+```
 
 ---
 

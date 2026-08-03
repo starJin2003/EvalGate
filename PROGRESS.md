@@ -4,7 +4,7 @@ Current state of EvalGate. Read this first in every session. Update it before en
 
 Three files, three jobs. BUILD_PLAN.md is the plan and rarely changes. DECISIONS.md is an append only log of rationale and measurements. This file is mutable current state and gets overwritten freely.
 
-Last updated 2026-08-03. Last change: P1.3 run for real against the selected checkpoint and the harness verified live for the first time. **The GGUF exists and is not yet on the node** — deploying it is the critical path, and it unblocks P2's last item and P3's daily DAG.
+Last updated 2026-08-03. Last change: **the quantized model server is deployed and serving on the OCI node**, closing P2's last build item and unblocking P3's daily DAG. **The 96-case local-vs-node score comparison has not been run yet** — that is the next block, and it lives entirely on the node, so it can run in parallel with v2 training on the Mac.
 
 ---
 
@@ -21,9 +21,9 @@ Last updated 2026-08-03. Last change: P1.3 run for real against the selected che
 | P0 Bootstrap | Done 2026-07-31 |
 | P1.1 Data | **Done 2026-08-02.** 1,900 answered, 1,854 valid (97.6%), $2.89 of $5.00. Hand review 92/96 = 95.8%, criteria 3 and 4 clean. Acceptance rule fired as written |
 | P1.2 Training | **v1 DONE 2026-08-03.** 2,956 iters, 0 nan, peak 11.050 GB, final train loss 0.642. **Checkpoint selected: iter 2000**, full-split val 1.088358, by the pre-committed rule — the raw minimum is the final checkpoint (1.078588) but four arms sit within 0.01 and the tie-break takes the earliest. **v2 deliberately deferred** until the harness is verified end to end against v1 |
-| P1.3 Serving | **Done 2026-08-03 against the real selected checkpoint.** fuse 5.12 s → GGUF f16 14.37 s → Q4_K_M 12.68 s, **1,056.11 MiB at 5.12 BPW**, 95.3 tok/s generation on this M1 (Metal). Artifact `evalgate-qwen3-1.7b-v1-iter2000.Q4_K_M.gguf`, sha256 `6633f20c…`, **not yet uploaded** |
+| P1.3 Serving | **Done 2026-08-03 against the real selected checkpoint.** fuse 5.12 s → GGUF f16 14.37 s → Q4_K_M 12.68 s, **1,056.11 MiB at 5.12 BPW**, 95.3 tok/s generation on this M1 (Metal). Artifact `evalgate-qwen3-1.7b-v1-iter2000.Q4_K_M.gguf`, sha256 `6633f20c…`, **uploaded and serving on the node since 2026-08-03** |
 | P1.4 Harness | **Verified live 2026-08-03.** 96 golden cases against a running llama-server on the real v1 weights: **0 errors, 5.12 s/case, 492 s total**, real tokenization and context arithmetic, generated answers carrying `[C1][C2]` markers so client + renderer + server demonstrably agree. Required adding `--server-url` to the CLI, which had **no path to a live model at all**. Judge is still `StubJudge` — **the real judge has never been invoked and its pricing must be re-checked on the web first** |
-| P2 Infra | **One item left: the model server, blocked on v1.** Postgres on a 50 GB block volume, API public at `http://64.181.195.241`, kube-prometheus-stack with a committed 19-panel dashboard, and k6 recorded: **306,436 requests, 681 req/s, p95 192 ms, 0 errors.** The only P2 item left is the **model server**, which is blocked on v1 finishing — see the clause-by-clause reading below |
+| P2 Infra | **All four build items done 2026-08-03.** Postgres on a 50 GB block volume, API public at `http://64.181.195.241`, kube-prometheus-stack with a committed 19-panel dashboard, k6 recorded (**306,436 requests, 681 req/s, p95 192 ms, 0 errors**), and the **model server now live** — llama.cpp b10210 compiled on the node, Q4_K_M weights digest-gated on a boot-volume PV, ClusterIP at `evalgate-model:8080`. The one clause still unverifiable is zero-to-API, which needs a tenancy this project cannot create |
 | P3 Automation | **Airflow installed 2026-08-03.** Chart 1.22.0 / appVersion 3.2.2, LocalExecutor, 4 pods, smoke DAG green in 2.47 s. Gate workflow and threshold logic scaffolded 2026-08-01. **The daily per-suite eval DAG is not started** — it is blocked on the model server, which is blocked on v1 |
 | P4 Ingestion | Not started |
 | P5 Analytics | Not started |
@@ -38,7 +38,7 @@ four build items:
 | Terraform: VCN/subnet/NSG/instance, cloud-init k3s | **Done 2026-08-02** |
 | Deploy **Postgres** with a block volume PVC | **Done 2026-08-03** |
 | Deploy the **api** onto k3s | **Done 2026-08-03.** Public on port 80 via traefik, Postgres-backed, 2 replicas |
-| Deploy the **quantized model server** onto k3s | Not started. Blocked on v1 finishing and the P1.3 pipeline re-running against real weights |
+| Deploy the **quantized model server** onto k3s | **Done 2026-08-03.** llama.cpp b10210 built on the node (arm64 native), weights on the boot volume behind a sha256 gate checked on every pod start, `-t` set from a measured sweep, ClusterIP with no Ingress |
 | kube-prometheus-stack + `/metrics` on FastAPI + committed dashboard JSON | **Done 2026-08-03.** Chart 88.1.3, 5 pods, 592 Mi actual. 19-panel dashboard committed, every query verified populated |
 | k6 script, run and recorded | **Done 2026-08-03.** 306,436 requests, 681 req/s, p95 192 ms, p99 246 ms, 0 errors, all 4 pre-committed thresholds held |
 
@@ -87,11 +87,10 @@ Dashboards live. k6 numbers recorded."*
 | **Record list: node CPU and RAM idle vs load** | **Met.** 2,508 MB / load 0.17 idle → 2,626 MB / 74.9% CPU / load 9.57 under load |
 | **Record list: PAYG allowance verification** | **Met 2026-08-02.** 4 OCPU / 24 GB confirmed real |
 
-**What remains in P2 is one thing: the quantized model server**, which cannot be
-deployed until v1 finishes and the P1.3 pipeline runs against real weights. That
-is a Thread A dependency, not a Thread B gap.
+**All four P2 build items are now done.** The model server landed 2026-08-03,
+which also unblocks P3's daily eval DAG.
 
-**P2 is therefore not closed, but every clause that can be closed from here is.**
+**P2 is therefore closed apart from one structurally unverifiable clause.**
 The two residual caveats on the entrypoint clause are both structural rather than
 unfinished work: composing outside terraform is a deliberate decision recorded in
 DECISIONS.md, and zero-to-API is unverifiable without a tenancy this project does
@@ -101,7 +100,8 @@ not have and should not create. Neither is a task waiting to be done.
 `http://64.181.195.241` answers `/health`, `/ready`, `/suites`, `/runs`,
 `/diff`, and `/gate` from the internet, and the gate returned a correct `fail`
 verdict end to end through traefik, two pods, Postgres, and the block volume.
-What remains for P2 is the model server, dashboards, and k6.
+Dashboards, k6 and the model server have all landed since that was written, so
+nothing on P2's build list remains.
 
 The application database is **empty on purpose**: the verification data was
 deleted after it was recorded. The tables exist, created by the app at startup.
@@ -190,6 +190,14 @@ Fill this in as artifacts land. A new session should be able to read this sectio
 - **DAGs are baked into an image, not git-synced.** Three fewer always-on sidecars, and — the deciding reason — a git-sync push mid-run swaps the DAG file under a running DAG, producing a run whose code is not identifiable afterwards. Cost: every DAG edit is a ~25 s node build plus a rollout
 - **Logs: one RWO PVC on `local-path` via `logs.persistence.existingClaim`.** The chart's own PVC template **hardcodes ReadWriteMany** with no override and this cluster has no RWX class. RWO works because it constrains a volume to one **node**, not one pod — proven by the api-server pod reading a log the scheduler wrote. **Depends on there being exactly one node**; on a second node the answer is remote logging
 - **No ingress.** `kubectl port-forward svc/airflow-api-server 8080:8080` over the SSH tunnel, same precedent as 6443
+- **`infra/k8s/model/` is live.** `node-model-setup.sh`, `upload-weights.sh`, `Dockerfile` + `build-on-node.sh`, `10-storageclass` / `20-pv` / `30-pvc` / `40-deployment` / `50-service` / `60-servicemonitor`, `apply.sh`, `smoke.sh`, `bench-threads.sh`, `node-commitment.sh`
+- **The GGUF lives at `/var/lib/evalgate/models/` on the BOOT volume (`/dev/sda1`)**, behind a static node-affine `local` PV mounted readOnly — **not** the pgdata block volume (`/dev/sdb`). Weights are re-derivable from committed adapters; the database is not and has no backup. `node-model-setup.sh` reads the mount table and **refuses if the two resolve to the same device**, so this is enforced rather than remembered
+- **The digest is checked twice, and the second check is per pod start.** `upload-weights.sh` verifies after rsync and *deletes* the file on mismatch; the Deployment's `verify-gguf` initContainer re-runs `sha256sum -c` on every start from a ConfigMap generated out of `gguf_manifest.json`. A truncated 1 GB GGUF still loads and answers — wrongly — and that arrives at the harness looking like a model regression
+- **`evalgate-llama-server:b10210` is compiled on the node from the pinned `training/.scratch/llamacpp/src.tar.gz`**, the same source that built the binaries behind the local baseline. 136.5 MB, `linux/arm64`, `GGML_NATIVE=ON` (correct only because the build machine *is* the run machine), `LLAMA_BUILD_TOOLS=ON` — required, since llama-server lives under `tools/` in this version and `LLAMA_BUILD_SERVER` alone builds nothing
+- **`-t` is set explicitly and both `LLAMA_THREADS` and `OMP_NUM_THREADS` carry it.** Inside the pod `Cpus_allowed_list` is `0-3` and 4 CPUs are visible, so llama.cpp's auto-detect resolves to **4** — k8s does not virtualize `/proc/cpuinfo`, and the CPU limit is a CFS quota (`cpu.max 250000 100000`), not an affinity mask. Four threads ask 4000m against 2500m
+- **KV cache stays f16 at `-c 8192` (~896 MiB).** `--cache-type-k q8_0` would halve it and change numerics against the local baseline, which is the comparison the deploy exists to enable
+- **All three probes are `httpGet /health`; none is `tcpSocket`.** Measured, and it corrected an assumption: b10210 does **not** bind before loading — a restarting pod gives connection-refused for ~24 s then `200`, with no 503 window. `httpGet` stays because that ordering is an implementation detail, and because a starved HTTP thread holds the socket open while answering nothing. `apply.sh` additionally asserts `/props` reports the intended `model_path` and `n_ctx`, which no probe can
+- **No Ingress, deliberately.** llama-server has no auth and inference is the most CPU-expensive thing this node can be asked to do. Consumers are in-cluster at `evalgate-model.evalgate.svc.cluster.local:8080`; from a workstation it is a port-forward
 - **Airflow 3 forbids task code from touching the metadata DB** — `RuntimeError: Direct database access via the ORM is not allowed in Airflow 3.0`. The smoke DAG proves the metadata path via XCom and Variables instead. **The daily eval DAG must not assume DB access either**
 - `workers/` and `analytics/` are still README placeholders and are not packaged yet
 
@@ -215,7 +223,7 @@ Fill this in as artifacts land. A new session should be able to read this sectio
 - **k3s v1.36.2+k3s1**, node Ready, 7/7 system pods healthy including traefik and svclb. containerd 2.3.2-k3s2, kernel 6.17.0-1018-oracle aarch64
 - **Block storage: 100 GB of the 200 GB Always Free allowance used.** 50 GB boot (`/dev/sda`, VPU 10) plus 50 GB `evalgate-k3s-pgdata` (`/dev/sdb`, VPU 10, paravirtualized, AD-1), mounted at `/mnt/pgdata` by `LABEL=pgdata` with `_netdev,nofail`. **100 GB left** for the Prometheus TSDB and P4's Kafka. Verified from the limits API: `total-free-storage-gb` 200 per AD, `volume-count` 10000 — the free tier is capped in GB, not in number of volumes
 - **Node with Postgres, 2 API replicas, monitoring, and Airflow (2026-08-03):** 3,472 MB used of 23,974 MB, load 0.33. Requests **1,510m CPU (37%) / 3,852 Mi (16%)**; limits **7,750m (193%) / 8,714 Mi (36%)**. 17 pods. Before Airflow it was 2,508 MB, 1,070m/26%, 1,948 Mi/8%, 13 pods
-- **~2,500m of CPU requests remain unreserved, and 1,500m of that is earmarked for the model server** (2,500m limit, llama-server pinned to `-t 3`). Under CFS contention that gives inference ~2 of 4 cores, putting a 96-case suite at an estimated **40-60 min**. This node cannot run responsive inference and a responsive public API at once; the mitigation is a daily batch at a quiet hour, not architecture
+- **The model server took that reservation on 2026-08-03: 1,500m request / 2,500m limit, `-t 3`.** Node commitment went to **18 pods, requests 3,010m (75%) / 6,924 Mi (29%), limits 10,250m (256%) / 12,810 Mi (53%)**. `-t 3` is measured, not the earlier guess — and the measurement refuted the intuition behind it: `-t 2` never throttles and is still **23% slower**, because prefill is compute-bound and wants more threads than the 2500m quota funds. A 96-case suite projects to **~2.5 h**, not the 40-60 min previously estimated. This node cannot run responsive inference and a responsive public API at once; the mitigation is a nightly batch, not architecture
 - **Memory is not the constraint on this node — CPU is.** With everything above running, 8% of memory requests are committed. Even a generous Airflow (2.5 GB) plus Kafka (4 GB) would stay under 40%. This unblocks BUILD_PLAN section 12's Kafka sizing question in the direction of "size it for CPU and disk, not RAM"
 - **The node is now also the build machine.** nerdctl 2.3.5 and buildkit 0.32.0 installed 2026-08-03; `buildkitd.service` runs with `--containerd-worker-addr=/run/k3s/containerd/containerd.sock --containerd-worker-namespace=k8s.io` and `--oci-worker=false`. Builds are native aarch64 — no buildx, no QEMU. Build context lands in `/home/ubuntu/build/evalgate-api`
 - **`http://64.181.195.241` is live and public.** traefik Ingress, HTTP only. TLS needs a DNS name — Let's Encrypt will not issue for a bare IP — so it waits for P6's Cloudflare item
@@ -260,7 +268,7 @@ Anything waiting on a human goes here so a fresh session does not silently work 
 - **OPEN: the public API is HTTP only.** TLS needs a DNS name, since Let's Encrypt will not issue for `64.181.195.241`. Writes are token-guarded so credentials do not cross the wire in the clear, but the bearer token itself does. Fix with P6's Cloudflare item, or earlier with a free `sslip.io`-style name plus cert-manager if P3 wants HTTPS
 - **OPEN: the Postgres volume has no backup.** Three guards stop it being *deleted* — `prevent_destroy` on the terraform volume, `Retain` on both the PV and the StorageClass, and `node-volume-setup.sh` refusing to format a disk that already has a filesystem — but none of those is a backup, and corruption or a bad migration is not covered. The tenancy has **5 free OCI volume backups** available (`terraform output pgdata_volume_id`). Low urgency while the database is empty; this becomes real the moment P4 writes traces that are not in `recovery.jsonl`
 - **The block volume's disk prep is not in cloud-init and cannot be.** `node-volume-setup.sh` runs by hand over SSH because `user_data` executes only at first boot and this instance will never boot fresh again. If the instance is ever lost, restoring means: launch, run the bootstrap, run that script, re-attach the volume, recreate the secret. Written down because it is exactly the step a rebuild would forget
-- **P2's k6 numbers are stale as of the Airflow install.** They were taken at 13 pods and 5,750m of CPU limits; the node now runs 17 pods at 7,750m (193%). Deliberately not re-run — they remain a valid record of that configuration. **Re-take before making any load-based claim once the model server lands**, which is when CPU contention stops being theoretical
+- **P2's k6 numbers are stale, and the model server has now landed.** They were taken at 13 pods and 5,750m of CPU limits; the node now runs 18 pods at 10,250m (256%). Deliberately not re-run — they remain a valid record of that configuration, and re-running k6 *while* the node is doing CPU inference measures a configuration nobody will actually run. **Any future load-based claim needs a fresh run, and must state whether the model server was idle or serving**, because those are two different machines
 - Databricks Free Edition external access path for pushing files and running dbt from outside is unverified. Check at the start of P5
 - `pre-commit run --all-files` reported nothing before the first commit because the scaffold was untracked. Resolved, hooks engage from the first commit onward
 
@@ -280,22 +288,24 @@ Mac and no memory prohibition applies.
 ordering is deliberate: another 9-hour run before knowing the instrument works is
 9 hours bet on untested plumbing.
 
-### Thread B — the model server is the critical path
+### Thread B — the model server is live; P3's DAG is now the critical path
 
-Postgres, the API, monitoring, k6 and Airflow all landed 2026-08-03. **One build
-item remains in P2 and it now blocks P3 as well**: the quantized model server.
+Postgres, the API, monitoring, k6, Airflow **and the model server** all landed
+2026-08-03. **P2's build items are complete** and P3's daily eval DAG is
+unblocked.
 
 In order:
 
 1. ~~**P1.3 pipeline against the selected checkpoint.**~~ **Done 2026-08-03.**
    `evalgate-qwen3-1.7b-v1-iter2000.Q4_K_M.gguf`, 1,056.11 MiB, sha256
-   `6633f20c…`, in gitignored `training/.scratch/`. **Not uploaded.**
-2. **Model server → k3s.** `build-on-node.sh` is proven four times. The GGUF is
-   ~1 GB, so it needs a volume: `local-path` on the boot volume, not the block
-   volume — weights are re-derivable from the adapters, the database is not.
-   **CPU budget is already reserved: 1500m request / 2500m limit, with
-   llama-server pinned to `-t 3`** so it cannot saturate all four cores and
-   starve Postgres or the API.
+   `6633f20c…`, in gitignored `training/.scratch/`. **Uploaded 2026-08-03.**
+2. ~~**Model server → k3s.**~~ **Done 2026-08-03.** Live at
+   `evalgate-model.evalgate.svc.cluster.local:8080`. The reserved 1500m/2500m
+   budget was kept; the pre-deploy guess of `-t 3` was **replaced by a measured
+   sweep** inside the real cgroup — see the DECISIONS Stats table for all four
+   arms. **The 96-case comparison against the local baseline has NOT been run
+   yet** and is the next block; it lives entirely on the node, so it can run in
+   parallel with v2 training on the Mac.
 3. ~~**Then P1.4 end to end.**~~ **The client, renderer and server half is done
    2026-08-03**, locally: 96 cases, 0 errors, 5.12 s/case, real citation markers.
    **What remains is the first judge call on `gpt-5.4-mini`, which is a priced
@@ -306,9 +316,15 @@ In order:
    the ORM in tasks), and deferrable operators are barred while the triggerer is
    disabled.
 
-**Expect the eval DAG to be slow.** CPU-only inference on ~2 contended cores puts
-a 96-case suite at an estimated 40-60 min, dominated by prefill. That is fine for
-a daily batch and is not fine for anything interactive.
+**Expect the eval DAG to be slow — slower than previously estimated.** The
+40-60 min figure was a guess made before anything ran on the node. Measured at
+the shipped `-t 3`: **prefill 35.5-36.6 tok/s, generation ~7.85 tok/s, 81-92 s
+per case** on ~2,500-2,700-token prompts, with prefill taking 68-77 s of each.
+Against the M1's ~1,000 tok/s prefill and 95.3 tok/s generation that is ~28x
+slower on prefill and ~12x on generation, and it puts a 96-case suite at
+**roughly 2.5 hours**. Fine for a nightly batch; not fine for anything
+interactive, and the DAG's timeouts must be written against 2.5 h rather than
+1 h.
 
 **Re-take k6 before any load-based claim once the model server is up.** The
 recorded figures were taken at 13 pods and 5,750m of CPU limits; the node is now
@@ -420,6 +436,8 @@ Nothing in P2's remainder blocks P1.2, and P1.2 blocks nothing in P2 except the 
 ## 8. Session log
 
 Newest first. Three to five lines each. What was attempted, what landed, what broke, what the next session needs to know.
+
+**2026-08-03 Model server deployed to the OCI node. P2's last build item is done; the 96-case comparison is deliberately NOT part of this block.** Split at the deploy/verify boundary on instruction: the deploy unblocks P3 and takes ~30 min, the suite is ~2.5 h of confirmation, and holding a 9-hour v2 run behind confirmation costs more than the confirmation is worth. **Transfer 80 s** (1,107,408,896 B, 13.8 MB/s, 110.7 Mbit/s), sha256 verified on arrival with the script deleting the file on mismatch, then **re-verified in an initContainer on every pod start** — a truncated 1 GB GGUF still loads and answers wrongly, and that reaches the harness disguised as a model regression. Weights sit on the **boot volume**, and `node-model-setup.sh` reads the kernel's mount table and refuses if the target shares a device with `/mnt/pgdata`: the GGUF rebuilds in 32 s from committed adapters, the database does not and has no backup. **llama.cpp b10210 compiled on the node in 257.5 s** from the same vendored tarball that produced the local baseline's binaries, so the pending score comparison differs in hardware and backend only — image 136.5 MB, `linux/arm64`, no emulation. **Three assumptions were checked and one was wrong.** The probe design was written around llama-server binding its socket before loading and serving 503 while loading; polling a restarting pod every 250 ms shows **connection-refused for ~24 s and then 200, with no 503 window at all**, so the risk that motivated `httpGet` over `tcpSocket` does not exist on this build. `httpGet /health` was kept anyway and the *reason* rewritten in place — the startup order is an implementation detail, and a CPU-starved HTTP thread holds the socket open while answering nothing. **The thread sweep refuted its own author's prior.** Rule fixed first: four arms, lowest median wall per case, tie within 5% to the lower thread count. Result **`-t 3` at 79.3 s**, with `-t 4` 79.4 s, `auto`(=4) 81.2 s and **`-t 2` at 97.5 s despite being the only arm that never throttles** — so "stay inside the quota" is not the rule, because prefill is compute-bound and wants more threads than 2500m funds. 3 beat 4 not on wall time (a tie) but on throttled *time*: 37.8 s against 121.0 s for identical work. Evidence for why any of this is needed was measured directly: inside the pod `Cpus_allowed_list` is `0-3` with `cpu.max 250000 100000`, so auto-detect asks 4000m of a 2500m quota. **Memory arithmetic was also too optimistic** — predicted ~2.2 GiB, measured `memory.peak` 2,900 Mi at 94.4% of a 3Gi limit, because mmap'd weights count as page cache in the container's cgroup; raised to 3Gi/4Gi, now 65%. Commitment went **17 → 18 pods, 1,510m → 3,010m requests, 7,750m → 10,250m limits (256%)**. Serving measures **prefill 35.5-36.6 tok/s, generation ~7.85 tok/s, 81-92 s/case**, which puts the 96-case suite at **~2.5 h against the 40-60 min previously written down** — the DAG's timeouts need to be sized against that. Also added `--timeout-s` to `evalgate-eval run` with the **default left at 180 s**, since moving it would silently change every existing caller: a case that exceeds the timeout is recorded as a per-case error, indistinguishable from the model failing to answer. Suite 219 passed, 10 skipped; ledger untouched at $2.8930. Five defects logged in DECISIONS, three of them self-inflicted script bugs that each cost a full sweep — most usefully `... | python3 <<'PY'`, where the heredoc *is* stdin so the piped JSON is never read.
 
 **2026-08-03 P1.4 client and prompt unification, written while v1 trains. Nothing run against a live server.** BUILD_PLAN P1.4 wants evalcore's schema/runner/scorers (including citation validity as a *rule-based* check), a cached judge client with 429 backoff, a case-level diff report grouped by category, apps/api v0, and arm64 Dockerfiles; its exit is the harness *detecting* the v1→v2 regression and naming the broken category and cases. Two pieces landed. **The prompt drift risk turned out to be worse than flagged:** `training` already had **two** renderers — `teacher.prompts.build_messages` for the API calls and `dataset.build.to_example` for the training rows — agreeing only by hand, and the eval client would have made three. Verified they were byte-identical (so no data is affected), then collapsed all three into `evalcore.prompt`. Chose the single-source route over fixture-pinning because a fixture only catches drift it happens to exercise. Guarded twice, in different places: `test_prompt.py` pins the bytes and fails in CI, which cannot see the gitignored splits, and `dataset_manifest.json`'s per-split sha256 fails locally over the real 1,758 rows. Used the digests as the acceptance test — after rewiring, train/valid/test still matched byte for byte, so the refactor is proven inert rather than assumed to be. **`LlamaServerModel`** implements the existing protocol unchanged: stdlib urllib, temperature 0, `enable_thinking: false` explicit, `ref` carrying version and quantization, and a dedicated `ContextOverflowError` separate from `ModelError` because overflow is a suite-configuration fault no retry fixes. Tested against a threaded `http.server` replaying payloads **transcribed from the real llama-server in P1.3**, including the overflow body verbatim; `run_case` turns overflow into a per-case error rather than a crash. Suite 178 → 194. Judge cost measured from real golden-set tokens rather than guessed: gpt-5.4-mini $0.253/run, gpt-4.1 $0.616/run, against $2.1070 remaining — **the judge choice is the one open decision and it needs a human.**
 
