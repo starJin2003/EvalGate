@@ -36,6 +36,7 @@ cd "$REPO_ROOT"
 TF_DIR="$REPO_ROOT/infra/terraform"
 KUBECONFIG_PATH="${EVALGATE_KUBECONFIG:-$HOME/.kube/evalgate.yaml}"
 API_IMAGE="${EVALGATE_API_IMAGE:-evalgate-api:0.1.0}"
+AIRFLOW_IMAGE="${EVALGATE_AIRFLOW_IMAGE:-evalgate-airflow:3.2.2-dags}"
 
 STEP=0
 step() { STEP=$((STEP + 1)); printf '\n\033[1m[%d/9] %s\033[0m\n' "$STEP" "$*"; }
@@ -289,6 +290,12 @@ step "Build the API image — on the node, natively for aarch64"
   | grep -vE "LIBARCHIVE|^#[0-9]+ (CACHED|extracting|sha256|transferring|DONE|resolve)" \
   | sed 's/^/      /' || true
 
+# Airflow's DAGs are baked into an image rather than git-synced, so they need a
+# build too. Same node, same BuildKit, same k8s.io namespace.
+./infra/k8s/airflow/build-on-node.sh "$AIRFLOW_IMAGE" 2>&1 \
+  | grep -vE "LIBARCHIVE|^#[0-9]+ (CACHED|extracting|sha256|transferring|DONE|resolve)" \
+  | sed 's/^/      /' || true
+
 # ==============================================================================
 step "Deploy — postgres, then monitoring, then api"
 # ==============================================================================
@@ -302,6 +309,74 @@ step "Deploy — postgres, then monitoring, then api"
 ./infra/k8s/postgres/apply.sh   2>&1 | sed 's/^/      /'
 ./infra/k8s/monitoring/apply.sh 2>&1 | sed 's/^/      /'
 ./infra/k8s/api/apply.sh        2>&1 | sed 's/^/      /'
+
+# --- airflow, last ------------------------------------------------------------
+#
+# After api, not before it. The public API is what this script advertises as
+# live and what P2's exit criterion names; the orchestrator is not on its
+# critical path and should not delay it.
+#
+# Airflow's secrets are provisioned here rather than in the secrets step above
+# because the metadata secret requires a role and database inside Postgres, and
+# Postgres only exists a few lines ago. Same generate-if-absent, never-rotate,
+# never-print rule as the others; airflow/apply.sh still only ever checks.
+kubectl apply -f infra/k8s/airflow/00-namespace.yaml >/dev/null
+
+if kubectl -n airflow get secret airflow-metadata >/dev/null 2>&1; then
+  log "airflow-metadata: exists, leaving alone"
+else
+  # Refuse rather than generate if the database already exists without the
+  # secret — a fresh password would not match it, exactly as for Postgres.
+  if kubectl -n evalgate exec postgres-0 -- psql -U evalgate -d postgres -tAc \
+       "SELECT 1 FROM pg_database WHERE datname='airflow'" 2>/dev/null | grep -q 1; then
+    die "secret/airflow-metadata is missing but database 'airflow' already exists.
+       A new password would not match it. Recreate the secret with the ORIGINAL
+       password, or ALTER ROLE airflow first. See infra/k8s/README.md."
+  fi
+  printf '%s' "$(randpw 32)" > "$SECRET_TMP/airflow_pw"
+  kubectl -n evalgate exec -i postgres-0 -- psql -U evalgate -d postgres -v ON_ERROR_STOP=1 \
+    -c "CREATE ROLE airflow LOGIN PASSWORD '$(cat "$SECRET_TMP/airflow_pw")';" >/dev/null
+  kubectl -n evalgate exec -i postgres-0 -- psql -U evalgate -d postgres -v ON_ERROR_STOP=1 \
+    -c "CREATE DATABASE airflow OWNER airflow;" >/dev/null
+  printf 'postgresql://airflow:%s@postgres.evalgate.svc.cluster.local:5432/airflow' \
+    "$(cat "$SECRET_TMP/airflow_pw")" > "$SECRET_TMP/connection"
+  kubectl -n airflow create secret generic airflow-metadata \
+    --from-file="$SECRET_TMP/connection" >/dev/null
+  log "airflow-metadata: generated (role + database created)"
+fi
+
+# jwt, api-secret-key and fernet-key are NOT hygiene. The chart regenerates each
+# on every helm upgrade when unset, which breaks running DAGs and — for the
+# fernet key — makes everything already stored in the metadata DB undecryptable.
+for pair in airflow-jwt:jwt-secret airflow-api-secret-key:api-secret-key airflow-fernet-key:fernet-key; do
+  name="${pair%%:*}"; key="${pair##*:}"
+  if kubectl -n airflow get secret "$name" >/dev/null 2>&1; then
+    log "$name: exists, leaving alone"
+  else
+    if [ "$key" = "fernet-key" ]; then
+      # Fernet needs a 32-byte urlsafe-base64 key, not an arbitrary string.
+      python3 -c "import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode(),end='')" > "$SECRET_TMP/$key"
+    else
+      printf '%s' "$(randpw 48)" > "$SECRET_TMP/$key"
+    fi
+    kubectl -n airflow create secret generic "$name" --from-file="$SECRET_TMP/$key" >/dev/null
+    log "$name: generated"
+  fi
+done
+
+if kubectl -n airflow get secret airflow-admin >/dev/null 2>&1; then
+  log "airflow-admin: exists, leaving alone"
+else
+  printf '%s' "$(randpw 32)" > "$SECRET_TMP/password"
+  kubectl -n airflow create secret generic airflow-admin --from-file="$SECRET_TMP/password" >/dev/null
+  log "airflow-admin: generated"
+fi
+
+./infra/k8s/airflow/apply.sh 2>&1 | sed 's/^/      /'
+# Creates the FAB tables and the admin user. Idempotent, and required: the
+# chart's migrate job runs only `airflow db migrate`, so FAB's own tables would
+# otherwise be missing and the first login would fail.
+./infra/k8s/airflow/bootstrap-admin.sh 2>&1 | tail -4 | sed 's/^/      /'
 
 # ==============================================================================
 step "Verify — against the public address, not a port-forward"

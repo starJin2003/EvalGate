@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import time
+from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -110,7 +111,11 @@ def run_probe(overrides: dict[str, Any] | None = None) -> dict[str, Any]:
     return {"loss_log": str(log_path), "adapter_path": args.adapter_path}
 
 
-def eval_adapters(checkpoints: list[str] | None = None) -> dict[str, Any]:
+def eval_adapters(
+    checkpoints: list[str] | None = None,
+    adapter_path: str | None = None,
+    progress_log: str | None = None,
+) -> dict[str, Any]:
     """Loss for the untrained baseline and each saved checkpoint over the FULL
     valid split.
 
@@ -133,13 +138,37 @@ def eval_adapters(checkpoints: list[str] | None = None) -> dict[str, Any]:
 
     settings = dict(config.TRAIN_PROBE)
     settings.pop("loss_log")
+    if adapter_path:
+        settings["adapter_path"] = adapter_path
     args = build_args(settings)
     adapter_dir = Path(args.adapter_path)
-    names = checkpoints or sorted(p.name for p in adapter_dir.glob("[0-9]*_adapters.safetensors"))
+
+    if checkpoints:
+        names = checkpoints
+    else:
+        # Sorted numerically, not lexically: "0001000" before "0000200" is what a
+        # plain string sort gives once the run is long enough to have five digits.
+        numbered = sorted(
+            adapter_dir.glob("[0-9]*_adapters.safetensors"),
+            key=lambda p: int(p.name.split("_")[0]),
+        )
+        names = [p.name for p in numbered]
+        # The final weights are a candidate the pre-committed rule names
+        # explicitly, and the numbered glob does not match them — mlx-lm writes
+        # them as a bare `adapters.safetensors`. Discovering only the numbered
+        # files would silently drop one arm of the comparison, and the arm most
+        # likely to be assumed the default at that.
+        final = adapter_dir / "adapters.safetensors"
+        if final.exists():
+            names.append(final.name)
 
     model, tokenizer = load(args.model, tokenizer_config={"trust_remote_code": True})
     _train, valid_set, _test = load_dataset(args, tokenizer)
     valid = CacheDataset(valid_set)
+    # Only the tokenizer was needed to build the dataset. Freed before scoring
+    # rather than at the end, because `score()` holds its own copy of the model
+    # and this one would otherwise sit resident for the whole multi-hour sweep.
+    del model
 
     def score(adapter: str | None) -> float:
         m, _ = load(args.model, tokenizer_config={"trust_remote_code": True})
@@ -157,12 +186,52 @@ def eval_adapters(checkpoints: list[str] | None = None) -> dict[str, Any]:
             loss=default_loss,
         )
 
-    results = {"rows": len(valid_set), "losses": {}}
-    results["losses"]["baseline"] = score(None)
-    for name in names:
-        results["losses"][name.split("_")[0].lstrip("0") or "0"] = score(name)
+    # Scoring 16 arms over the full split is a multi-hour job, and holding every
+    # result in memory until the last finishes means a crash at hour three loses
+    # all of it. Each arm is flushed the moment it is computed.
+    if progress_log:
+        Path(progress_log).parent.mkdir(parents=True, exist_ok=True)
 
-    del model
+    t0 = time.time()
+    results: dict[str, Any] = {
+        "rows": len(valid_set),
+        "adapter_path": str(adapter_dir),
+        "losses": {},
+    }
+
+    with ExitStack() as stack:
+        log_fh = stack.enter_context(Path(progress_log).open("a")) if progress_log else None
+
+        def record(label: str, value: float) -> None:
+            if log_fh:
+                log_fh.write(
+                    json.dumps(
+                        {
+                            "label": label,
+                            "val_loss": value,
+                            "elapsed_s": round(time.time() - t0, 1),
+                        },
+                        sort_keys=True,
+                    )
+                    + "\n"
+                )
+                log_fh.flush()
+            print(f"  {label:<10} {value:.4f}", flush=True)
+
+        base = score(None)
+        results["losses"]["baseline"] = base
+        record("baseline", base)
+        for name in names:
+            label = (
+                "final"
+                if name == "adapters.safetensors"
+                else (name.split("_")[0].lstrip("0") or "0")
+            )
+            value = score(name)
+            results["losses"][label] = value
+            record(label, value)
+
+    results["wall_clock_s"] = round(time.time() - t0, 1)
     return results
 
 

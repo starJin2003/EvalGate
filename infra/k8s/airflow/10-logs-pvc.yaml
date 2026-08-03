@@ -1,0 +1,62 @@
+# The shared Airflow log volume, created here rather than by the chart.
+#
+# THE PROBLEM. Under LocalExecutor the scheduler runs the task and writes its
+# log to local disk; the api-server is a different pod and cannot serve a file
+# it cannot see. The chart's answer is a shared PVC — but
+# templates/logs-persistent-volume-claim.yaml hardcodes
+#
+#     accessModes: ["ReadWriteMany"]
+#
+# with no values override (the `accessMode` key in the chart's values belongs to
+# dags.persistence, not logs.persistence), and this cluster has no RWX class.
+# local-path says so plainly:
+#
+#     failed to provision volume with StorageClass "local-path":
+#     NodePath only supports ReadWriteOnce and ReadWriteOncePod access modes
+#
+# THE FIX. Create the claim ourselves as ReadWriteOnce and point
+# `logs.persistence.existingClaim` at it. RWO is correct rather than a
+# compromise: it constrains a volume to one NODE, not one pod, and the
+# api-server, scheduler and dag-processor are all co-scheduled on the one node
+# this cluster has. All three mount it simultaneously.
+#
+# >>> This depends on there being exactly ONE node, and stops being sound the
+# >>> day a second one joins. At that point the answer is remote logging, not a
+# >>> bigger volume.
+#
+# STORAGE CLASS. The stock `local-path`, deliberately. An earlier attempt added
+# a custom class with volumeBindingMode: Immediate, on the theory that deferred
+# binding let three pods race to be "first consumer". That theory was wrong
+# twice over: the original failure was the RWX access mode above, and local-path
+# cannot do Immediate at all —
+#
+#     failed to provision volume: configuration error, no node was specified
+#
+# because a node-local provisioner needs a scheduled consumer before it knows
+# which node to carve the directory on. So WaitForFirstConsumer is not a
+# tolerated default here, it is a requirement of the provisioner.
+#
+# Consequence for apply.sh: this claim stays Pending until the first Airflow pod
+# is scheduled. That is expected, and it is why apply.sh does NOT gate on Bound
+# before running helm.
+#
+# On the boot volume, NOT the Postgres block volume: logs are regenerable, and
+# the block volume carries only what is not. Same split as the Prometheus TSDB.
+# local-path enforces no quota, so 2Gi is what the claim asks for, not a bound —
+# the real bound is the scheduler's log groomer (retentionDays 15 plus a 1.5 GB
+# maxSizeBytes, both set in values.yaml).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: airflow-logs
+  namespace: airflow
+  labels:
+    app.kubernetes.io/name: airflow
+    app.kubernetes.io/part-of: evalgate
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi

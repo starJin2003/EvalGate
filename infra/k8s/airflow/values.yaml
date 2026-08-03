@@ -1,0 +1,277 @@
+# Apache Airflow on the single 4 OCPU / 24 GB k3s node.
+#
+# Chart 1.22.0, appVersion 3.2.2. Pinned exactly in apply.sh, never a range.
+# 1.17.0 is the floor for the Airflow 3.x line (1.16.0 still ships 2.10.5);
+# below that there is no `apiServer` and no standalone `dagProcessor`.
+#
+# The binding constraint on this node is CPU, not memory: measured before this
+# install, requests were 1070m (26%) and limits 5750m (143%) of 4 OCPU, while
+# memory requests were 1948Mi (8%). Every choice below is made against that.
+
+# Pins the image the chart derives component defaults from. This is the DAG
+# image built on the node FROM apache/airflow:3.2.2 — DAGs are baked, not
+# git-synced (see dags: below).
+defaultAirflowRepository: evalgate-airflow
+defaultAirflowTag: "3.2.2-dags"
+airflowVersion: "3.2.2"
+
+images:
+  airflow:
+    repository: evalgate-airflow
+    tag: "3.2.2-dags"
+    # No registry exists. The image is built into containerd's k8s.io namespace
+    # on the node; Always would send kubelet to Docker Hub for an image that
+    # only exists locally.
+    pullPolicy: IfNotPresent
+
+# --- executor -----------------------------------------------------------------
+#
+# Chart default is CeleryExecutor, which adds a resident Redis pod AND a
+# resident worker Deployment — both burning CPU while idle, on the one resource
+# this node does not have.
+#
+# KubernetesExecutor has zero idle cost but makes every task a pod (~10-15s
+# launch) and, decisively, puts task logs in ephemeral pods that are deleted.
+#
+# LocalExecutor runs tasks as subprocesses inside the scheduler pod. Fewest
+# pods, lowest idle cost, and — the reason it is chosen — the scheduler pod's
+# CPU limit becomes a hard structural ceiling on ALL DAG execution combined.
+#
+# Given up: no horizontal worker scale-out (there is one node, and the A1
+# capacity lottery bars adding another), no per-task resource isolation, and a
+# scheduler restart kills in-flight tasks. All acceptable for a daily batch DAG
+# that can simply re-run.
+executor: "LocalExecutor"
+
+# --- disabled components, each named rather than left to a default ------------
+redis:
+  enabled: false        # Celery-only; nothing uses it under LocalExecutor
+pgbouncer:
+  enabled: false        # one scheduler against one Postgres needs no pooler
+flower:
+  enabled: false        # Celery UI; there is nothing to show
+postgresql:
+  enabled: false        # the bundled subchart. Reusing the real Postgres
+
+# The chart's default createUserJob creates admin/admin. It must never exist at
+# any point, not even briefly. The admin is created out-of-band by
+# bootstrap-admin.sh with a generated password held in a k8s secret.
+createUserJob:
+  enabled: false
+
+# Nothing defers. Cutting the pod on a CPU-bound node.
+#
+# CONVENTION, enforced by review rather than by code: deferrable operators are
+# BARRED while this is false. A deferred task with no triggerer does not error —
+# it hangs forever in `deferred`, which is the worst kind of failure to debug.
+# Re-enable this in the same PR that introduces the first deferrable operator.
+triggerer:
+  enabled: false
+
+# --- statsd: ENABLED ----------------------------------------------------------
+#
+# Reversed from the first plan. The argument for disabling — "there is no DAG
+# yet, so there is nothing to measure" — is true today and false next block: the
+# daily eval DAG lands immediately after this one, and DAG runtime is a named
+# item in BUILD_PLAN's P3 Record list. Deferring would cost a second helm
+# upgrade, a second up.sh no-op re-verification and a second DECISIONS entry,
+# which together exceed what the pod costs.
+statsd:
+  enabled: true
+  resources:
+    requests:
+      cpu: 20m
+      memory: 48Mi
+    limits:
+      cpu: 100m
+      memory: 128Mi
+
+# --- metadata database --------------------------------------------------------
+#
+# The existing Postgres, with its OWN database and role (`airflow`/`airflow`),
+# separate from `evalgate`. That keeps Airflow's schema out of the database
+# holding the 1,900 teacher answers and lets the role be revoked independently.
+#
+# All four secrets below are created OUT OF BAND and apply.sh refuses rather
+# than generating them. Three of them are not merely hygiene:
+#
+#   jwtSecretName        the chart's own values warn that an unset jwtSecret is
+#                        regenerated on every helm upgrade, "which can cause dag
+#                        failures during component rollouts"
+#   apiSecretKeySecretName  same class of problem for the API's Flask secret
+#   fernetKeySecretName  regenerating this makes every connection and variable
+#                        already stored in the metadata DB undecryptable
+#
+# Left unset, all three break running DAGs AND break up.sh's no-op property.
+data:
+  metadataSecretName: airflow-metadata
+
+jwtSecretName: airflow-jwt
+apiSecretKeySecretName: airflow-api-secret-key
+fernetKeySecretName: airflow-fernet-key
+
+# --- DAG delivery: baked, not git-synced --------------------------------------
+#
+# git-sync would add a sidecar to EACH of scheduler, dag-processor and
+# api-server — three always-on pollers on a CPU-bound node. The public repo
+# removes git-sync's usual advantage (no credentials), so it is not a
+# differentiator here.
+#
+# The deciding argument is correctness rather than CPU. With git-sync, a push
+# mid-run swaps the DAG file underneath a running DAG: Airflow re-parses, and
+# tasks starting after the swap execute new code while earlier tasks in the same
+# run executed old code — producing a run whose code is not identifiable
+# afterwards. For a project whose entire purpose is reproducible eval
+# comparison, that is disqualifying.
+#
+# Given up: every DAG edit needs a ~25s build on the node plus a rollout.
+dags:
+  persistence:
+    enabled: false
+  gitSync:
+    enabled: false
+
+# --- logs ---------------------------------------------------------------------
+#
+# THE single-node trap for this chart. Default is persistence.enabled=false,
+# giving each pod its own emptyDir: under LocalExecutor the scheduler writes the
+# task log into ITS emptyDir, and the api-server is a different pod with a
+# different emptyDir, so the UI cannot serve it.
+#
+# There is no ReadWriteMany class on this cluster — only local-path and
+# pgdata-local, both RWO.
+#
+# The fix that works here: ONE RWO PVC mounted simultaneously by api-server,
+# scheduler and dag-processor. ReadWriteOnce constrains a volume to one NODE,
+# not one pod, and pods co-scheduled on the same node may all mount it. There is
+# exactly one node.
+#
+# >>> THIS STOPS BEING SOUND THE MOMENT A SECOND NODE JOINS THE CLUSTER. <<<
+#
+# local-path, not the Postgres block volume: logs are regenerable, and the same
+# split applies as for the Prometheus TSDB — the block volume carries only what
+# cannot be regenerated. Reclaim policy is the class default, Delete, because a
+# Retain policy here would only accumulate orphaned log volumes.
+# existingClaim, because the chart's own PVC template hardcodes
+# `accessModes: ["ReadWriteMany"]` with no values knob, and local-path rejects
+# RWX outright:
+#
+#   NodePath only supports ReadWriteOnce and ReadWriteOncePod access modes
+#
+# Measured, twice, before the cause was found. 20-logs-pvc.yaml creates the same
+# volume as ReadWriteOnce, which is sound here because RWO is a per-NODE
+# constraint and all three consumers share the one node.
+logs:
+  persistence:
+    enabled: true
+    existingClaim: airflow-logs
+
+# --- resources: every pod, and every sidecar ----------------------------------
+#
+# Sidecars included deliberately. The Grafana sidecars in kube-prometheus-stack
+# shipped with no resources at all and used 72Mi each; "I set resources on the
+# chart" is not the same as "every container in the chart has resources".
+scheduler:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 200m
+      memory: 768Mi
+    limits:
+      # THE ceiling on all DAG execution. Under LocalExecutor tasks are
+      # subprocesses inside this cgroup, so everything the DAGs do together
+      # cannot exceed 1 of the node's 4 OCPU, whatever a DAG asks for.
+      cpu: 1000m
+      memory: 1536Mi
+  logGroomerSidecar:
+    enabled: true
+    # Chart default is 15 days. Kept, and given a hard size bound as well —
+    # local-path enforces no quota, so the 2Gi PVC above is advisory on its own.
+    # maxSizeBytes is what actually stops log growth filling the boot volume.
+    retentionDays: 15
+    frequencyMinutes: 15
+    maxSizeBytes: 1500000000  # 1.5 GB of the 2Gi claim
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 50m
+        memory: 64Mi
+
+apiServer:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  service:
+    # No ingress. The precedent is exact: 6443 is off the internet and reached
+    # over the SSH tunnel, while 80/443 are public ONLY because GitHub Actions
+    # runners must call the eval gate. Nothing outside the cluster calls
+    # Airflow, so it gets no public surface.
+    type: ClusterIP
+
+dagProcessor:
+  enabled: true
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 300m
+      memory: 768Mi
+  logGroomerSidecar:
+    enabled: true
+    retentionDays: 15
+    resources:
+      requests:
+        cpu: 10m
+        memory: 32Mi
+      limits:
+        cpu: 50m
+        memory: 64Mi
+
+migrateDatabaseJob:
+  enabled: true
+  useHelmHooks: false
+  applyCustomEnv: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+# --- ingress: none ------------------------------------------------------------
+ingress:
+  enabled: false
+
+# --- airflow config -----------------------------------------------------------
+config:
+  core:
+    # Concurrency caps, so a DAG cannot route around the scheduler CPU limit by
+    # running many tasks at once. Together with that limit these are what make
+    # "a DAG run cannot starve the api or Postgres pods" structural rather than
+    # hopeful.
+    parallelism: 4
+    max_active_tasks_per_dag: 2
+    max_active_runs_per_dag: 1
+    load_examples: 'False'
+    # Chart default already sets FabAuthManager. Restated here because admin
+    # creation depends on it: `airflow users create` belongs to the FAB provider
+    # CLI, verified present in apache/airflow:3.2.2. Note the chart's migrate
+    # job runs ONLY `airflow db migrate`, not `airflow fab-db migrate`, so the
+    # FAB tables are created by bootstrap-admin.sh instead.
+    auth_manager: "airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager"
+  logging:
+    # Console logs stay parseable; the file logs are what the PVC above serves.
+    colored_console_log: 'False'
+  api:
+    # Behind a port-forward, so no proxy fix and no external base URL.
+    base_url: "http://localhost:8080"

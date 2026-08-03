@@ -337,8 +337,14 @@ def cmd_train_trajectory(args: argparse.Namespace) -> None:
     print(train_probe.format_trajectory(train_probe.read_trajectory(args.log)))
 
 
-def cmd_train_eval_adapters(_: argparse.Namespace) -> None:
-    print(train_probe.format_eval(train_probe.eval_adapters()))
+def cmd_train_eval_adapters(args: argparse.Namespace) -> None:
+    result = train_probe.eval_adapters(
+        adapter_path=args.adapter_path, progress_log=args.progress_log
+    )
+    print(train_probe.format_eval(result))
+    if args.json_out:
+        Path(args.json_out).write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+        print(f"\nwrote {args.json_out}")
 
 
 def cmd_budget(_: argparse.Namespace) -> None:
@@ -474,9 +480,25 @@ def build_parser() -> argparse.ArgumentParser:
     tj = t.add_parser("trajectory", help="print the probe loss trajectory from its log")
     tj.add_argument("--log", help=f"default {config.TRAIN_PROBE['loss_log']}")
     tj.set_defaults(func=cmd_train_trajectory)
-    t.add_parser(
+    ea = t.add_parser(
         "eval-adapters", help="score baseline + every saved checkpoint on the FULL valid split"
-    ).set_defaults(func=cmd_train_eval_adapters)
+    )
+    ea.add_argument(
+        "--adapter-path",
+        default=None,
+        help=(
+            "adapter directory to score. Defaults to TRAIN_PROBE's, which is the "
+            f"PROBE dir ({config.TRAIN_PROBE['adapter_path']}) — pass the real run's "
+            "directory explicitly when selecting a checkpoint."
+        ),
+    )
+    ea.add_argument("--json-out", default=None, help="also write the raw losses to this path")
+    ea.add_argument(
+        "--progress-log",
+        default=None,
+        help="append each arm's loss as it completes, so a crash mid-sweep loses one arm not all",
+    )
+    ea.set_defaults(func=cmd_train_eval_adapters)
 
     sub.add_parser("budget", help="show cumulative spend").set_defaults(func=cmd_budget)
     return p
