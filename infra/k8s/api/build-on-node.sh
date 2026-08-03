@@ -16,12 +16,27 @@
 set -euo pipefail
 
 TAG="${1:-evalgate-api:0.1.0}"
-NODE_SSH="${EVALGATE_NODE_SSH:-ssh -i $HOME/.ssh/evalgate_ed25519 ubuntu@64.181.195.241}"
 REMOTE_DIR=/home/ubuntu/build/evalgate-api
 
 log() { printf '[build-on-node] %s\n' "$*"; }
 
 [ -f pyproject.toml ] || { log "FATAL: run this from the repo root."; exit 1; }
+
+# Derived from terraform rather than defaulted to a literal address. A
+# hardcoded IP here works on exactly one machine and silently targets the wrong
+# host — or nothing — from a fresh clone.
+if [ -z "${EVALGATE_NODE_SSH:-}" ]; then
+  NODE_SSH="$(cd infra/terraform && AWS_REQUEST_CHECKSUM_CALCULATION=when_required terraform output -raw ssh_command 2>/dev/null)" || true
+  [ -n "${NODE_SSH:-}" ] || {
+    log "FATAL: EVALGATE_NODE_SSH is unset and 'terraform output ssh_command' failed."
+    log 'Set it explicitly:  EVALGATE_NODE_SSH="ssh -i ~/.ssh/evalgate_ed25519 ubuntu@<node-ip>"'
+    exit 1
+  }
+  # terraform emits a literal ~, which does not expand out of a variable.
+  NODE_SSH="${NODE_SSH//\~/$HOME}"
+else
+  NODE_SSH="${EVALGATE_NODE_SSH}"
+fi
 
 # Exactly what apps/api/Dockerfile COPYs, and nothing else. training/.scratch is
 # 9.5 GB and training/artifacts is 244 MB and being written to by the live run;

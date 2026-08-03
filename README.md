@@ -59,10 +59,79 @@ flowchart LR
     PG -->|daily export| DELTA
 ```
 
-## Quickstart
+## Deploy: one command
+
+From a fresh clone plus credentials to a running public API:
+
+```bash
+./up.sh
+```
+
+It prints the URL and a `curl` when it finishes. On a live system it is a no-op
+that takes about 45 seconds.
+
+**What it needs first** — `up.sh` checks all of this before changing anything,
+and names the exact file that is missing:
+
+| | |
+|---|---|
+| Tools | `terraform`, `kubectl`, `ssh`, `scp`, `curl`, `tar`, `base64`. **No Docker** |
+| `~/.oci/config` | `oci setup config`, then upload the public key in the console |
+| `~/.aws/credentials` | An OCI **Customer Secret Key** under the profile named in `backend.hcl` — not the API signing key |
+| `infra/terraform/terraform.tfvars` | From `terraform.tfvars.example`; `tenancy_ocid` and `admin_cidr` |
+| `infra/terraform/backend.hcl` | From `backend.hcl.example`; your Object Storage namespace |
+| SSH keypair | `ssh-keygen -t ed25519 -f ~/.ssh/evalgate_ed25519 -N ''` |
+
+**What it does**, in order: `terraform apply` → wait for cloud-init's k3s → fetch
+kubeconfig and open the SSH tunnel → prepare the node (disk, BuildKit, helm) →
+generate any missing secrets → **build the API image on the node** → apply
+Postgres, then monitoring, then the API → verify against the public address.
+
+It is a composer. Every step is a script that already worked on its own; `up.sh`
+supplies ordering, preconditions, and environment, and reimplements none of it.
+
+**Three things worth knowing about it:**
+
+*It exports `AWS_REQUEST_CHECKSUM_CALCULATION=when_required` itself.* Left to
+your shell profile, the first terraform call fails with `403
+SignatureDoesNotMatch` — an error that blames credentials and is actually a
+streaming checksum trailer OCI does not implement. That should never have been a
+README instruction.
+
+*Secrets are generated when absent and never rotated.* The three out-of-band
+credentials do not exist in a fresh clone, so `up.sh` creates them — into
+mode-600 temp files passed to `kubectl --from-file`, so they never appear in
+`ps`, in shell history, in the script's output, or anywhere under the repo. A
+second run leaves them alone, because rotating a credential under a running
+system is exactly how a "no-op" would break one. One case refuses instead: if
+`postgres-credentials` is missing while the database exists, a new password could
+not match it — `POSTGRES_PASSWORD` is read only by `initdb` on a first boot — so
+the script stops and says so.
+
+*Nothing is built on your machine.* The image is built on the node, natively for
+its aarch64, with the build context streamed over SSH. `up.sh` will note that
+Docker is installed if it finds it, and then not use it.
+
+**Idempotence.** Running it again is a no-op: terraform reports `0 added, 0
+changed, 0 destroyed`, every Kubernetes object reports `unchanged`, secrets
+report `exists, leaving alone`, and no pod is replaced. The image build re-runs
+but is a BuildKit cache hit producing the same digest, so `kubectl apply` sees no
+diff. The one thing that increments is the helm release revision — a metadata
+row, with identical rendered manifests.
+
+**Not proven.** The zero-to-API path has never been executed end to end, and
+cannot be from here: the instance is a free-tier `VM.Standard.A1.Flex` obtained
+through a capacity lottery and is explicitly never to be destroyed. See
+[PROGRESS.md](PROGRESS.md) for exactly which steps are exercised and which are
+not.
+
+---
+
+## Local development quickstart
 
 Requires an arm64 machine (Apple Silicon or Ampere), [uv](https://docs.astral.sh/uv/),
-and Docker with Compose.
+and Docker with Compose. This is the **local** stack for working on the code; it
+is unrelated to `./up.sh`, which deploys to OCI.
 
 ```bash
 # 1. Tooling (macOS)

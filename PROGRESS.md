@@ -4,7 +4,7 @@ Current state of EvalGate. Read this first in every session. Update it before en
 
 Three files, three jobs. BUILD_PLAN.md is the plan and rarely changes. DECISIONS.md is an append only log of rationale and measurements. This file is mutable current state and gets overwritten freely.
 
-Last updated 2026-08-03, while v1 was training. Last change: k6 load test recorded — 306,436 requests, 681 req/s, p95 192 ms, 0 errors — closing every P2 item except the model server.
+Last updated 2026-08-03, while v1 was training. Last change: `./up.sh`, a single idempotent entrypoint from clone to live public API, verified as a 44 s no-op. P2's only remaining item is the model server.
 
 ---
 
@@ -21,7 +21,7 @@ Last updated 2026-08-03, while v1 was training. Last change: k6 load test record
 | P1.2 Training | **v1 RUNNING since 2026-08-02 18:00**, 2,956 iters at 5e-5, seq 6528 + grad-checkpoint, ETA ~04:20. Probe confirmed the LR (full-split val 5.4749 → 1.0056, 81.6% drop). **v2 deliberately deferred** until the harness is verified end to end against v1 |
 | P1.3 Serving | **Pipeline proven 2026-08-03 against throwaway probe weights.** fuse → GGUF f16 → Q4_K_M (1.03 GB) → llama-server, arm64 native, 84 tok/s. Re-run against v1 when it exists |
 | P1.4 Harness | **Code landed 2026-08-03 at `66cc2e6`, 194 tests passing.** *Verified:* `LlamaServerModel` speaks the protocol against a fake server built from real captured payloads; prompt renderer unified into `evalcore.prompt` and proven byte-identical. *Not verified:* anything against a live server — no real tokenization, no context arithmetic, no judge call. Judge model now decided (gpt-5.4-mini) but **never invoked** |
-| P2 Infra | **Effectively complete 2026-08-03, one clause outstanding.** Postgres on a 50 GB block volume, API public at `http://64.181.195.241`, kube-prometheus-stack with a committed 19-panel dashboard, and k6 recorded: **306,436 requests, 681 req/s, p95 192 ms, 0 errors.** The only P2 item left is the **model server**, which is blocked on v1 finishing — see the clause-by-clause reading below |
+| P2 Infra | **One item left: the model server, blocked on v1.** Postgres on a 50 GB block volume, API public at `http://64.181.195.241`, kube-prometheus-stack with a committed 19-panel dashboard, and k6 recorded: **306,436 requests, 681 req/s, p95 192 ms, 0 errors.** The only P2 item left is the **model server**, which is blocked on v1 finishing — see the clause-by-clause reading below |
 | P3 Automation | Gate workflow and threshold logic scaffolded 2026-08-01 |
 | P4 Ingestion | Not started |
 | P5 Analytics | Not started |
@@ -40,6 +40,35 @@ four build items:
 | kube-prometheus-stack + `/metrics` on FastAPI + committed dashboard JSON | **Done 2026-08-03.** Chart 88.1.3, 5 pods, 592 Mi actual. 19-panel dashboard committed, every query verified populated |
 | k6 script, run and recorded | **Done 2026-08-03.** 306,436 requests, 681 req/s, p95 192 ms, p99 246 ms, 0 errors, all 4 pre-committed thresholds held |
 
+### `./up.sh` — what is proven and what is not
+
+Added 2026-08-03. Nine steps, composing scripts that already existed. **Verified
+only on the no-op path**, and the distinction matters:
+
+| Step | Exercised? |
+|---|---|
+| Preflight (tools, tfvars, backend.hcl, `~/.oci/config`, AWS profile, SSH keypair) | **Yes** — all pass on a configured machine. The *failure* branches are unexercised |
+| `terraform init` + `apply` | **Yes, as a no-op**: `0 added, 0 changed, 0 destroyed`. Creating an instance from nothing is **not** exercised |
+| Wait for SSH, wait for `bootstrap.done` | **Only the already-true case.** Both loops exited on the first attempt; the retry and timeout paths have never run against a booting node |
+| Fetch kubeconfig, open SSH tunnel | **Yes.** Both branches — opening a tunnel, and reusing one that already exists |
+| Node prep: volume, BuildKit, helm | **Only the already-installed case.** All three reported "already"; the install branches are unexercised here, though each ran for real when it was first written |
+| Secret generation | **Only the "exists, leaving alone" branch.** Generation has never run through `up.sh` — the three secrets were created by hand earlier. The refuse-if-database-exists guard is likewise unexercised |
+| Build on node | **Yes.** Runs every time; BuildKit cache hit, same digest |
+| `apply.sh` ×3 | **Yes.** Every object `unchanged` |
+| Verify against the public address | **Yes.** `/health` and `/ready` both 200 |
+
+**So: zero-to-API is not verified.** A from-scratch run would need a fresh
+tenancy, and this instance can never be destroyed to produce one — it is a
+`VM.Standard.A1.Flex` that took days of capacity retries. What is verified is
+that running it against a live system changes nothing: 44 s, exit 0, identical
+pod uids, identical secret resourceVersions, `restartCount=0` across three
+consecutive runs.
+
+The unexercised branches are the ones that only fire on a fresh tenancy. They are
+the same code paths that each ran successfully once, by hand, when the
+corresponding piece was first built — but not through this wrapper, and not in
+sequence.
+
 ### P2 exit criterion, clause by clause
 
 BUILD_PLAN P2: *"`terraform apply` goes from zero to a running public API.
@@ -47,7 +76,7 @@ Dashboards live. k6 numbers recorded."*
 
 | Clause | Status |
 |---|---|
-| **`terraform apply` goes from zero to a running public API** | **Partially — and honestly, not literally true.** `terraform apply` provisions the VCN lookup, NSG, instance, block volume, and k3s via cloud-init. It does **not** deploy Postgres, the API, or monitoring; those are `infra/k8s/*/apply.sh` plus a node-side image build. A stranger reaches a running public API by following the README, not by running one command |
+| **one command goes from zero to a running public API** | **Met in substance, with one honest caveat.** `./up.sh` is that command and a stranger's path is now `./up.sh`. Two qualifications: the command is not literally `terraform apply` — the deploys compose *outside* terraform on purpose, because a failed `local-exec` provisioner taints its resource and terraform's remedy for a tainted resource is to destroy it, which on this project means the irreplaceable instance; and the **zero-to-API path is unverified**, because proving it needs a fresh tenancy and this instance can never be destroyed to produce one. What is verified is the no-op path. See the table above |
 | **running public API** | **Met.** `http://64.181.195.241` serves `/health`, `/ready`, `/suites`, `/runs`, `/diff`, `/gate` from the internet, Postgres-backed, 2 replicas, 0 restarts through 306k requests |
 | **Dashboards live** | **Met.** Grafana 13.1.1, dashboard `evalgate-p2` committed as JSON and loaded from a generated ConfigMap. 19 panels, every query verified returning data during the load window |
 | **k6 numbers recorded** | **Met.** In DECISIONS.md: RPS, p95, p99, error rate, checks, node CPU and RAM idle vs under load, and the generator/system CPU split |
@@ -56,12 +85,15 @@ Dashboards live. k6 numbers recorded."*
 | **Record list: node CPU and RAM idle vs load** | **Met.** 2,508 MB / load 0.17 idle → 2,626 MB / 74.9% CPU / load 9.57 under load |
 | **Record list: PAYG allowance verification** | **Met 2026-08-02.** 4 OCPU / 24 GB confirmed real |
 
-**So: one clause is not met as written.** The phase's build list also names the
-quantized model server, which cannot be deployed until v1 finishes and the P1.3
-pipeline runs against real weights. **P2 is not closed.** What remains is the
-model server plus, if the exit criterion is to be taken literally, either a
-single command that goes from zero to a running API or an amendment to the
-wording. Everything else in P2 is done and measured.
+**What remains in P2 is one thing: the quantized model server**, which cannot be
+deployed until v1 finishes and the P1.3 pipeline runs against real weights. That
+is a Thread A dependency, not a Thread B gap.
+
+**P2 is therefore not closed, but every clause that can be closed from here is.**
+The two residual caveats on the entrypoint clause are both structural rather than
+unfinished work: composing outside terraform is a deliberate decision recorded in
+DECISIONS.md, and zero-to-API is unverifiable without a tenancy this project does
+not have and should not create. Neither is a task waiting to be done.
 
 **The "running public API" clause of the exit criterion now holds.**
 `http://64.181.195.241` answers `/health`, `/ready`, `/suites`, `/runs`,
@@ -137,6 +169,10 @@ Fill this in as artifacts land. A new session should be able to read this sectio
 - **Grafana is ClusterIP only**, reached by port-forward over the SSH tunnel. Admin credential in the out-of-band `grafana-admin` secret. No TLS on a bare IP, so a public admin login would cross the wire in cleartext
 - **`apps/api` exports Prometheus metrics on port 9000**, not on the public router — the Ingress maps :80 to :8000 only, so `/metrics` returns 404 from the internet and `up` from the ServiceMonitor. Labelled by **route template**, so a suite id can never become its own series
 - **The in-progress gauge is hand-rolled**, because `prometheus-fastapi-instrumentator` constructs that one metric without `registry=` and it lands in the global default. Two tests pin the behaviour
+- **`./up.sh` at the repo root is the single entrypoint**: clone + credentials → live public API, nine steps, idempotent. It **composes** the existing scripts — terraform apply, the three `node-*-setup.sh`, `build-on-node.sh`, then `postgres/` → `monitoring/` → `api/` apply scripts — and reimplements none of them. Deploys are deliberately **not** inside terraform: a failed `local-exec` provisioner taints its resource, and terraform's remedy for a taint is destroy-and-recreate, which on this project is the one instance that can never be replaced
+- **`up.sh` exports `AWS_REQUEST_CHECKSUM_CALCULATION=when_required` itself**, so the misleading 403 can no longer be reached by an operator who did not read DECISIONS.md. It also preflights the `~/.aws/credentials` profile named in `backend.hcl`, since a missing profile produces the identical error
+- **Secret policy in `up.sh` is generate-if-absent, never rotate, never print.** Values reach kubectl through mode-600 files via `--from-file`, so they are absent from `ps`, shell history, stdout, and the repo. One refusal case: a missing `postgres-credentials` alongside an existing StatefulSet stops the run, because `POSTGRES_PASSWORD` is read only by `initdb` on a first boot and a new password would not match the database
+- **`build-on-node.sh` no longer defaults to a hardcoded IP.** It derives the node from `terraform output ssh_command`, expanding the literal `~` terraform emits, and fails with instructions if neither is available — a hardcoded address worked on exactly one machine and would silently target nothing from a fresh clone
 - **`infra/k6/` is the P2 load test.** `script.js` (committed thresholds, weighted read mix), `job.yaml` (k6 as a **Job in the cluster**, capped at 1 CPU, so cadvisor separates generator CPU from the API's), `seed.sh`, `run.sh`, `teardown.sh`. Run order is seed → run → teardown; they are separate scripts so a failed run leaves the fixture to inspect rather than deleting the evidence
 - **The load test writes nothing.** It seeds 1 suite + 2 runs + 1 baseline through the authenticated API, loads read paths only, then deletes exactly those rows with `WHERE suite_id LIKE 'k6-%'` in FK order and **asserts the counts returned to the pre-run baseline**. No `TRUNCATE`, no `DROP`, no `CASCADE` — written that way because of the fixture incident on the same night
 - **k6 pushes metrics to Prometheus** via `enableRemoteWriteReceiver` plus `K6_PROMETHEUS_RW_SERVER_URL`, so the load window stays on the dashboard within retention rather than only in a terminal. The k6 row's panels are empty when no run is in scope — that is expected, unlike a permanently empty panel
@@ -177,7 +213,7 @@ Fill this in as artifacts land. A new session should be able to read this sectio
 
 - **State is remote**, not local. OCI Object Storage bucket `evalgate-tfstate`, key `evalgate/p2/terraform.tfstate`, namespace `ax3mt2roo4ha`, private, **versioning enabled**. S3-native locking is on and verified
 - OCI has no native Terraform backend; this is the `s3` backend against Object Storage's S3-compatible API. Config is split: `backend.tf` committed, `backend.hcl` gitignored (copy `backend.hcl.example`). Every `init` needs `-backend-config=backend.hcl`
-- **`export AWS_REQUEST_CHECKSUM_CALCULATION=when_required` is mandatory.** Put it in your shell profile. Without it every state operation fails with `403 SignatureDoesNotMatch: The secret key required to complete authentication could not be found`, which points at credentials and is completely misleading — the real cause is a streaming checksum trailer OCI does not implement. `skip_s3_checksum` in the backend block and `request_checksum_calculation` in `~/.aws/config` both look like fixes and are not; the config-file key fixes the `aws` CLI only. `retry-apply.sh` exports it, so only manual `terraform` commands are exposed
+- **`export AWS_REQUEST_CHECKSUM_CALCULATION=when_required` is mandatory.** Put it in your shell profile. Without it every state operation fails with `403 SignatureDoesNotMatch: The secret key required to complete authentication could not be found`, which points at credentials and is completely misleading — the real cause is a streaming checksum trailer OCI does not implement. `skip_s3_checksum` in the backend block and `request_checksum_calculation` in `~/.aws/config` both look like fixes and are not; the config-file key fixes the `aws` CLI only. `retry-apply.sh` and `up.sh` both export it, so only manual `terraform` commands run outside those two are exposed
 - The S3 credential is an OCI **Customer Secret Key** (not the API signing key), stored in `~/.aws/credentials` under profile `evalgate-tfstate`, mode 600, never in the repo. Its access key is the key object's `id` field
 - Newly created Customer Secret Keys take **~80 s** to become usable and fail with that same misleading 403 until they do
 - Stale pre-migration local state kept as `infra/terraform/terraform.tfstate.migrated-to-oci`, gitignored, as a cold fallback
@@ -189,7 +225,7 @@ Anything waiting on a human goes here so a fresh session does not silently work 
 - ~~Hugging Face write token~~ **Cleared 2026-08-02.** Token is in `.env` and the base model pulled
 - ~~Sequence-length sign-off~~ **Cleared 2026-08-02. Approved at `--max-seq-length 6528` with `--grad-checkpoint`, and that is what v1 is running.** Now written into code as `config.TRAIN_MAX_SEQ_LENGTH` / `config.TRAIN_GRAD_CHECKPOINT` rather than living only in prose
 - ~~Judge model selection~~ **Decided 2026-08-03: `gpt-5.4-mini`.** See section 6 for the one caveat that remains (re-verify pricing on the web before the first call)
-- Add `export AWS_REQUEST_CHECKSUM_CALCULATION=when_required` to the shell profile. Terraform state operations fail without it, with an error that blames credentials
+- ~~Add `export AWS_REQUEST_CHECKSUM_CALCULATION=when_required` to the shell profile~~ **Cleared 2026-08-03.** `up.sh` exports it, so the one-command path no longer depends on the operator's profile. Still worth having in your profile for manual `terraform` calls outside the wrapper
 
 ## 6. Known issues and deferred items
 
@@ -313,7 +349,13 @@ Optionally, and cheaply: re-run k6 once the model server is on the node, to see
 what the API's numbers look like when it is no longer the only thing competing
 for 4 OCPU. The current figures were taken with the node otherwise quiet.
 
-Reaching the cluster, every time:
+Bringing everything up, or confirming it is already up:
+
+```bash
+./up.sh          # idempotent, ~45 s against a live system, prints the URL
+```
+
+Reaching the cluster directly, every time:
 
 ```bash
 cd infra/terraform && export AWS_REQUEST_CHECKSUM_CALCULATION=when_required
