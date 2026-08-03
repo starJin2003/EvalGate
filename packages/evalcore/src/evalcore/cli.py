@@ -14,6 +14,7 @@ from pathlib import Path
 from .diff import compare
 from .judge import JudgeCache, JudgeClient, StubJudge
 from .loader import from_golden_jsonl, load_suite, save_suite
+from .model import LlamaServerModel
 from .report import html_report, markdown_comment, terminal_report
 from .runner import EchoContextModel, StubModel, run_suite
 from .schema import RunResult
@@ -32,7 +33,18 @@ def cmd_build_suite(args: argparse.Namespace) -> int:
 
 def cmd_run(args: argparse.Namespace) -> int:
     suite = load_suite(Path(args.suite))
-    if args.outputs:
+    if args.server_url:
+        # The live path. Until P1.3 produced a real GGUF there was no way to
+        # reach it from here at all: `LlamaServerModel` existed and was tested
+        # against a fake server, but nothing in this CLI could construct one, so
+        # the client, the prompt renderer and a real llama-server had never been
+        # in the same process.
+        model = LlamaServerModel(
+            version=args.model_version,
+            quantization=args.quantization,
+            base_url=args.server_url,
+        )
+    elif args.outputs:
         model = StubModel(json.loads(Path(args.outputs).read_text()), ref=args.model_ref)
     else:
         model = EchoContextModel()
@@ -100,6 +112,16 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--out", required=True)
     r.add_argument("--outputs", help="JSON map of case_id -> output; omit to use the echo model")
     r.add_argument("--model-ref", default="stub")
+    r.add_argument(
+        "--server-url",
+        help="live llama-server URL, e.g. http://127.0.0.1:8080. Takes precedence over --outputs",
+    )
+    r.add_argument(
+        "--model-version",
+        default="v1",
+        help="weights id baked into model_ref; use something that names the checkpoint",
+    )
+    r.add_argument("--quantization", default="Q4_K_M")
     r.add_argument("--run-id")
     r.add_argument("--judge", action="store_true")
     r.add_argument("--judge-cache")

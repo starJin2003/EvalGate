@@ -1,0 +1,2819 @@
+{
+  "run_id": "v1-iter2000-live",
+  "suite_id": "grounded-docs-qa",
+  "suite_version": "1",
+  "model_ref": "llama-server:v1-iter2000:Q4_K_M",
+  "results": [
+    {
+      "case_id": "100e76f5dd27611c",
+      "category": "adversarial",
+      "output": "I cannot provide instructions for a 'FastAPIResponseCache' class because the provided excerpts do not mention any 'FastAPIResponseCache' class or how to cache responses automatically in FastAPI [C1][C3][C4][C8]. The excerpts instead document FastAPI response classes such as Response, JSONResponse, ORJSONResponse, UJSONResponse, and StreamingResponse, and they describe how to create and return responses, including using Response with response_class and response_model [C1][C4][C8].",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 16 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3404
+    },
+    {
+      "case_id": "5d5a4dae0746a017",
+      "category": "adversarial",
+      "output": "I refuse because the provided excerpts do not mention a DataSourceConfig entry or how to set up a database connection in FastAPI [C1][C4][C3][C5][C6][C8][C2][C7][C1]. The excerpts instead document FastAPI's dependency injection system and how to use SQLModel and test databases [C1][C3][C4][C5][C6][C8]. The excerpts also include a template for generating a FastAPI app with a PostgreSQL frontend and a full-stack template [C6].",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 24 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 2743
+    },
+    {
+      "case_id": "c236c0424d87bacc",
+      "category": "adversarial",
+      "output": "I refuse because the provided excerpts do not mention 'QueryMatch' or explain its purpose, usage, or examples. The excerpts instead document FastAPI's Query parameter usage, regular expressions, Pydantic models, and request body usage [C1][C2][C3][C4][C5][C6][C7][C8].",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 16 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 2486
+    },
+    {
+      "case_id": "c7b84aebd509e95d",
+      "category": "adversarial",
+      "output": "I refuse because the provided excerpts do not mention any built-in dependency named 'CachedDependency' in FastAPI. The excerpts instead document a cache system that calls a sub-dependency only once per request and saves the returned value in a cache to reuse across dependants [C2][C3]. The excerpts also document a cache that can be set to use_cache=False when calling Depends, which is an Annotated example [C2].",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 11 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 2682
+    },
+    {
+      "case_id": "d1a3e0182a80a9e2",
+      "category": "adversarial",
+      "output": "I refuse because the provided excerpts do not mention any function named SecurityScopesConfigurer. The excerpts instead document using SecurityScopes (a SecurityScopes object) and explain how to declare scopes in path operations and dependencies [C3][C6][C7][C8]. The excerpts also show how to create an HTTPException with scope_str and include it in the WWW-Authenticate header [C8].",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 13 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 2873
+    },
+    {
+      "case_id": "d42e6a6044ae930d",
+      "category": "adversarial",
+      "output": "I refuse because the provided excerpts do not mention any decorator named secure_endpoint or any decorator that provides an HTTPS configuration for specific routes [C1][C2][C3][C4][C5][C6][C7][C8]. The excerpts instead document FastAPI's security utilities and tools for handling security and authentication, including HTTPS, and note that you can use tools like OAuth2 and JWT tokens for authentication [C2][C5][C8].",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 19 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 2488
+    },
+    {
+      "case_id": "197f9ff5ee05dced",
+      "category": "adversarial",
+      "output": "I refuse because the provided excerpts do not mention enableExperimentalAlerting or how it affects behavior in Grafana versions prior to 11.0. The excerpts instead document legacy alerting removal and migration guidance, the Alerting dry-run behavior, and migration guidance for v10.4.x [C1][C3][C6]. The excerpts also include migration notes for v10.4.x and the Alerting dry-run behavior [C3]. The excerpts do not document enableExperimentalAlerting or its impact on behavior before v11.0.",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 13 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3221
+    },
+    {
+      "case_id": "405c08f4af5777c3",
+      "category": "adversarial",
+      "output": "I cannot provide instructions for a grafana_cloud_stack_service_account_v2 resource because that name does not appear in the provided documentation excerpts [C1][C2][C3][C4][C5][C6][C7][C8]. The excerpts instead document grafana_cloud_stack_service_account and grafana_cloud_stack_service_account_token resources [C1][C2][C3][C4][C5][C6][C7][C8].",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 27 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 5846
+    },
+    {
+      "case_id": "545754ce66fdd346",
+      "category": "adversarial",
+      "output": "I refuse because the provided excerpts do not mention an API method named AlertManagerWebhookTrigger. The excerpts instead document webhook notification mechanisms and general webhook setup and testing guidance [C1][C2][C3][C4][C5][C6][C7][C8].",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 18 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 2720
+    },
+    {
+      "case_id": "872ef36753c1c470",
+      "category": "adversarial",
+      "output": "I refuse because the provided excerpts do not mention a GrafanaNotifierV3 API or enterprise alert management, so I cannot answer the question from these documents [C1][C2][C3][C4][C5][C6][C7][C8]. The excerpts instead describe configuring and using the built-in Grafana Alertmanager and the Alerting Provisioning HTTP API for enterprise alert management [C1][C2][C3][C4][C5][C6][C7][C8].",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 24 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3091
+    },
+    {
+      "case_id": "a20fa30aa4a981c8",
+      "category": "adversarial",
+      "output": "I refuse because the provided excerpts do not mention GrafanaMetricsCollector or any class that gathers and aggregates metrics from Loki [C1][C2][C3][C4][C5][C6][C7][C8]. The excerpts instead document Grafana Loki as an open-source logging stack and Loki's query editor and data source [C1][C2][C3][C4][C5][C6][C7][C8]. The excerpts also include Loki best practices and guidance on configuring Loki as a data source [C2][C3][C4][C5][C6][C7][C8].",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 32 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3572
+    },
+    {
+      "case_id": "c821b344968fa2ab",
+      "category": "adversarial",
+      "output": "I cannot provide documentation for a $__cloudwatch_fetch function because the provided excerpts do not mention such a function [C1][C2][C3][C4][C5][C6][C7][C8]. The excerpts instead document the CloudWatch data source, list query types and variables, and explain how to add and configure the data source [C1][C2][C3][C4][C5][C6][C7][C8].",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 29 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3156
+    },
+    {
+      "case_id": "13f24ce1514e9d3b",
+      "category": "adversarial",
+      "output": "I refuse because the provided excerpts do not mention prometheus.NewMetricCollector, so I cannot explain how to use it. The excerpts instead document creating a default CollectorRegistry and registering custom collectors with it [C2][C7][C8].",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 11 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 2884
+    },
+    {
+      "case_id": "25b85f050fb21fec",
+      "category": "adversarial",
+      "output": "I refuse because the provided excerpts do not mention 'prometheus.SQSQueueListener' or any class named that, so I cannot explain how to use it. The excerpts instead document exporters and integrations for Prometheus, including the 'prometheus.SQSQueueListener' class, and they explain how to feed logs into Prometheus instead. [C1][C3][C4][C5][C6][C7][C8] The excerpts also document client libraries and guidance on writing client libraries, and they explain how to expose metrics via client libraries. [C1][C3][C4][C5][C6][C7][C8] The excerpts also document exporters and integrations, guidance on writing client libraries, and how to expose metrics via client libraries. [C1][C3][C4][C5][C6][C7][C8] The excerpts also document exporters and integrations, guidance on writing client libraries, and how to expose metrics via client libraries. [C1][C3][C4][C5][C6][C7][C8] The excerpts also document exporters and integrations, guidance on writing client libraries, and how to expose metrics via client libraries. [C1][C3][C4][C5][C6][C7][C8] The excerpts also document exporters and integrations, guidance on writing client libraries, and how to expose metrics via client libraries. [C1][C3][C4][C5][C6][C7][C8] The excerpts also document exporters and integrations, guidance on writing client libraries, and how to expose metrics via client libraries. [C1][C3][C4][C5][C6][C7][C8] The excerpts also document exporters and integrations, guidance on writing client libraries, and how to expose metrics via client libraries. [C1][C3][C4][C5][C6][C7][C8] The excerpts also document exporters and integrations, guidance on writing client libraries, and how to expose metrics via client libraries. [C1][C3][C4][C5][C6][C7][C8] The excerpts also document exporters and integrations, guidance on writing client libraries, and how to expose metrics via client libraries. [C1][C3][C4][C5][C6][C7][C8] The excerpts also document exporters and integrations, guidance",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 88 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 10381
+    },
+    {
+      "case_id": "788db616cccda4c7",
+      "category": "adversarial",
+      "output": "I refuse because the provided excerpts do not mention prometheus.SetGrafanaIntegration(enabled bool), so I cannot explain whether that function exists or how to enable Grafana integration from Prometheus. The excerpts instead document Grafana's built-in Prometheus data source and general Prometheus integration guidance [C1][C8]. The excerpts also document configuring Prometheus for Grafana and the Prometheus data source in Grafana [C3][C4][C6]. The excerpts do not include any documentation for a prometheus.SetGrafanaIntegration function, so I cannot explain its existence or behavior from these documents. The excerpts instead document Grafana's built-in Prometheus data source and general Prometheus integration guidance [C1][C8].",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 16 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3594
+    },
+    {
+      "case_id": "7da35a6504077d6e",
+      "category": "adversarial",
+      "output": "I refuse because the provided excerpts do not mention a Prometheus API call named GetActiveSeriesCountByNamespace. The excerpts instead document Grafana Cloud's grafanacloud_instance_active_series metric and Prometheus's grafanacloud_instance_active_series metric, and they describe Prometheus's behavior and usage limits [C1][C2][C3][C4][C5][C6][C7][C8].",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 17 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 2660
+    },
+    {
+      "case_id": "aa8b3dc32d0144d0",
+      "category": "adversarial",
+      "output": "I refuse because the provided excerpts do not mention any 'AzureMetricAggregator' API or any Azure-specific aggregator API. The excerpts instead document Grafana's cloud-managed Prometheus services and migration guidance for AWS and Azure authentication methods [C2][C2]. The excerpts also document Grafana's built-in Prometheus data source and cloud-managed Prometheus services, and they document Prometheus server-side metric metadata support and plan to use it in the future [C3][C4][C5][C6][C7][C8].",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 17 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 2911
+    },
+    {
+      "case_id": "b41682345b030d8c",
+      "category": "adversarial",
+      "output": "I refuse because the provided excerpts do not mention a PromWriteTimeout setting. The excerpts instead document Prometheus remote-write tuning parameters such as min_shards, max_shards, max_samples, max_backoff, and a PromWriteTimeout parameter in the remote-write configuration [C7][C8]. The excerpts also describe the Remote-Write protocol and its requirements, including that receivers must respond with HTTP 2xx on success, HTTP 5xx on failure, and HTTP 4xx on invalid requests [C5]. The excerpts further document the experimental Remote-Write 2.0 specification and background [C6].",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 12 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3029
+    },
+    {
+      "case_id": "1e3e43b7d4bb78d9",
+      "category": "adversarial",
+      "output": "I cannot enable the experimental_grafana_integration feature because the provided excerpts do not mention Pydantic or any experimental feature. The excerpts instead document configuring the Grafana Pyroscope data source via the data source interface or via a YAML configuration file [C2][C4][C3]. The excerpts also explain the Pyroscope data source's connection URL and authentication, and they note that you must have administrator rights to provision the Pyroscope data source [C2][C4][C5].",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 17 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 2630
+    },
+    {
+      "case_id": "3836702a65a8876e",
+      "category": "adversarial",
+      "output": "I refuse because the provided excerpts do not mention a configuration option named key_file_path, and the excerpts instead document loading PEM-encoded keys using the certificate and private key configuration options [C5][C6][C8]. The excerpts do show that you can load PEM keys by providing the certificate and private key values, and that you can only use one form of each configuration option [C5]. The excerpts also note that if you need to generate your own certificate and private key, use the example provided [C5].",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 13 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 2761
+    },
+    {
+      "case_id": "674d2d5c2b6956a4",
+      "category": "adversarial",
+      "output": "I refuse because the provided excerpts do not mention a PydanticORMMapper or how to use it for ORM integration [C5]. The excerpts instead document Pydantic's ability to pair with SQLAlchemy and note that ORM integration is possible by defining models and using Pydantic's aliases to avoid conflicts [C2][C5]. The excerpts also explain that Pydantic can validate arbitrary objects and that from_attributes enables validation of objects passed to the database [C5]. The excerpts further document that Pydantic can be used with SQLAlchemy and that ORM integration is shown by creating a CompanyOrm instance and validating it [C2][C5]. The excerpts also state that ORM integration is preferred when using Pydantic because it eliminates code duplication and that SQLAlchemy can be used with pure Pydantic models [C2]. The excerpts also document that Pydantic can validate ORM objects and that validation is done by getting attributes on the object [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts also state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 27 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 9582
+    },
+    {
+      "case_id": "88454406d6bd2364",
+      "category": "adversarial",
+      "output": "I refuse because the provided excerpts do not mention a validate_schema method or its usage in Pydantic version 3.0. The excerpts instead document Pydantic's model validation and serialization, including SchemaValidator and SchemaSerializer, and the SchemaValidator.validate_json method [C1][C4]. The excerpts also describe Pydantic validation and serialization, including validation of a callable's arguments and the SchemaValidator.validate_json example [C3][C4]. The excerpts further document Pydantic's validation of a callable's arguments and the SchemaValidator.validate_json example [C3][C4]. The excerpts also document Pydantic's validation of a callable's arguments and the SchemaValidator.validate_json example [C3][C4]. The excerpts also document Pydantic validation of a callable's arguments and the SchemaValidator.validate_json example [C3][C4]. The excerpts also document Pydantic validation of a callable's arguments and the SchemaValidator.validate_json example [C3][C4]. The excerpts also document Pydantic validation of a callable's arguments and the SchemaValidator.validate_json example [C3][C4]. The excerpts also document Pydantic validation of a callable's arguments and the SchemaValidator.validate_json example [C3][C4]. The excerpts also document Pydantic validation of a callable's arguments and the SchemaValidator.validate_json example [C3][C4]. The excerpts also document Pydantic validation of a callable's arguments and the SchemaValidator.validate_json example [C3][C4]. The excerpts also document Pydantic validation of a callable's arguments and the SchemaValidator.validate_json example [C3][C4]. The excerpts also document Pydantic validation of a callable's arguments and the SchemaValidator.validate_json example [C3][C4]. The excerpts also document Pydantic validation of a callable's arguments and the SchemaValidator.validate_json example [C3][C4]. The excerpts also document Pydantic validation of a callable's arguments and the SchemaValidator.validate_json example [C3][C4]. The excerpts also document Pydantic validation of a callable's arguments and the SchemaValidator.validate_json example [C3][C4]. The excerpts also document Pydantic validation of a callable's arguments and the SchemaValidator.validate_json example [C3][C4]. The excerpts also document Pydantic validation of a callable's arguments and the SchemaValidator.validate_json example [C3][C4]. The excerpts also document Pydantic validation of a callable's arguments",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 42 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 10799
+    },
+    {
+      "case_id": "8b6d8b630d0aa37e",
+      "category": "adversarial",
+      "output": "I refuse because the provided excerpts do not mention a BaseValidator class or how to extend it for custom validation. The excerpts instead document Pydantic's custom validators and validator functions such as field_validator, wrap, and model_before and model_after, and they explain how to create custom validators for fields and models [C1][C2][C3][C4][C5][C6][C7][C8].",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 16 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 4875
+    },
+    {
+      "case_id": "b3b1537101fa594b",
+      "category": "adversarial",
+      "output": "I refuse because the provided excerpts do not mention validate_async_call, so I cannot explain how to use it. The excerpts do show that validate_call is designed to validate arguments before calling a function, and that you can apply validate_call to a function with async support (see the validate_async_call documentation). [C1][C5] The excerpts also state that validate_async_call is an experimental feature and that it validates arguments before calling a function. [C1][C5] The excerpts further state that validate_async_call is not an equivalent to function definitions in strongly typed languages and that it will never be. [C1][C8]",
+      "refused": true,
+      "scores": [
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 3.0,
+          "passed": true,
+          "rationale": "refused, refusal required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 14 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 4289
+    },
+    {
+      "case_id": "33f5d042617ea792",
+      "category": "comparison",
+      "output": "I must refuse because the provided excerpts do not include a comparison between defining input/output data validations with a single Pydantic model versus separate models for input and output in FastAPI [C1][C2][C3][C4][C5][C6][C7][C8]. The excerpts do state that FastAPI is based on Pydantic and that Pydantic models are used for input/output in FastAPI [C1][C2][C3][C4][C5][C6][C7][C8]. The excerpts also note that FastAPI provides separate OpenAPI schemas for input and output and that Pydantic v2 makes the generated schemas more precise [C3][C6]. The excerpts state that FastAPI is fully compatible with Pydantic and that Pydantic features work well in FastAPI [C2]. The excerpts state that Pydantic guarantees validation of input data and that validation is a deliberate process [C5]. The excerpts also note that validation includes copying and coercion of data and that validation is the process of instantiating models that conform to types and constraints [C5]. The excerpts state that validation is the process of instantiating models and that Pydantic guarantees the output conforms to the field types [C5]. The excerpts state that validation is a deliberate process and that Pydantic guarantees the output conforms to the field types [C5]. The excerpts state that validation is the process of instantiating models and that Pydantic guarantees the output conforms to the field types [C5]. The excerpts state that validation is the process of instantiating models and that Pydantic guarantees the output conforms to the field types [C5]. The excerpts state that validation is the process of instantiating models and that Pydantic guarantees the output conforms to the field types [C5]. The excerpts state that validation is the process of instantiating models and that Pydantic guarantees the output conforms to the field types [C5]. The excerpts state that validation is the process of instantiating models and that Pydantic guarantees the output conforms to the field types [C5]. The excerpts state that validation is the process of instantiating models and that Pydantic guarantees the output conforms to the field types [C5]. The excerpts state that validation is the process of instantiating models and that Pydantic guarantees the output conforms to the field types [C5]. The excerpts state that validation is the process of instantiating models and that Pydantic guarantees the output conforms to the",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 0.9375,
+          "weight": 2.0,
+          "passed": false,
+          "rationale": "cited 15/16 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 0.0,
+          "weight": 1.0,
+          "passed": false,
+          "rationale": "refused, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 38 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 10017
+    },
+    {
+      "case_id": "474f8bb87c19e15e",
+      "category": "comparison",
+      "output": "I must refuse because the provided excerpts do not include the exact comparison between using Security with scopes versus a list of Depends in path operation decorators, nor do they state when one should be preferred over the other [C1][C2][C3][C4][C5][C6][C7][C8]. The excerpts instead document Security's role in declaring scopes and using Security with Depends, and they note that Security is a subclass of Depends and that Security() can be used to declare scopes [C1][C3][C4][C6][C8]. The excerpts also explain that SecurityScopes is used to verify scopes in a central dependency and that you can declare sub-dependencies with Security [C5][C6]. The excerpts further document that when you import Security, it is a function that returns a special class and that you can import security utilities from fastapi.security [C3][C4]. The excerpts also note that Security can be used to declare sub-dependencies and that you can close dependencies after yielding with Depends or with scope=\"request\" [C7]. The excerpts state that when you need to declare scopes, use Security, and when you need to close dependencies, use Depends [C3][C4][C7]. The excerpts also explain that Security can be used to declare sub-dependencies and that you can close dependencies after yielding with Depends or with scope=\"request\" [C7]. The excerpts state that Security is a subclass of Depends and that you can import Security directly from fastapi [C3]. The excerpts also note that Security can be used to declare sub-dependencies and that you can close dependencies after yielding with Depends or with scope=\"request\" [C7]. The excerpts state that Security is a subclass of Depends and that you can import Security directly from fastapi [C3]. The excerpts also note that Security can be used to declare sub-dependencies and that you can close dependencies after yielding with Depends or with scope=\"request\" [C7]. The excerpts state that Security is a subclass of Depends and that you can import Security directly from fastapi [C3]. The excerpts also note that Security can be used to declare sub-dependencies and that you can close dependencies after yielding with Depends or with scope=\"request\" [C7]. The excerpts state that Security is a subclass of Depends and that you can import Security directly from fastapi [C3]. The excerpts also note that Security can be used to declare sub-dependencies and that you can close dependencies after yielding with Depends",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 0.9333333333333333,
+          "weight": 2.0,
+          "passed": false,
+          "rationale": "cited 14/15 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 0.0,
+          "weight": 1.0,
+          "passed": false,
+          "rationale": "refused, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 37 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 8252
+    },
+    {
+      "case_id": "7c228f476a5bc9c5",
+      "category": "comparison",
+      "output": "I must refuse because the provided excerpts do not include FastAPI's documentation for query parameters or for Annotated usage, so I cannot compare them to FastAPI's documentation [C2][C4]. The excerpts do include FastAPI's documentation about query parameters and custom validation, and they note that Pydantic's validation is implemented in a separate core package and that validation is implemented in Rust [C3]. The excerpts also include documentation about Pydantic's experimental pipeline API and about plain and wrap validators [C4][C6]. The excerpts include documentation about Pydantic's performance and guidance on when to prefer plain vs after-validators [C3]. The excerpts include documentation about field validators and their behavior, including plain vs after-validators, and guidance on when to prefer plain vs after-validators [C6]. The excerpts include documentation about Pydantic's experimental pipeline API and guidance on when to prefer plain vs after-validators [C4]. The excerpts include documentation about Pydantic's performance and guidance on when to prefer plain vs after-validators [C3]. The excerpts include documentation about Pydantic's performance and guidance on when to prefer plain vs after-validators [C3]. The excerpts include documentation about Pydantic's performance and guidance on when to prefer plain vs after-validators [C3]. The excerpts include documentation about Pydantic's performance and guidance on when to prefer plain vs after-validators [C3]. The excerpts include documentation about Pydantic's performance and guidance on when to prefer plain vs after-validators [C3]. The excerpts include documentation about Pydantic's performance and guidance on when to prefer plain vs after-validators [C3]. The excerpts include documentation about Pydantic's performance and guidance on when to prefer plain vs after-validators [C3]. The excerpts include documentation about Pydantic's performance and guidance on when to prefer plain vs after-validators [C3]. The excerpts include documentation about Pydantic's performance and guidance on when to prefer plain vs after-validators [C3]. The excerpts include documentation about Pydantic's performance and guidance on when to prefer plain vs after-validators [C3]. The excerpts include documentation about Pydantic's performance and guidance on when to prefer plain vs after-validators [C3]. The excerpts include documentation about Pydantic's performance and guidance on when to prefer plain vs after-validators [C3]. The excerpts include documentation about Pydantic's performance and guidance on when to prefer plain vs after",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 0.9473684210526315,
+          "weight": 2.0,
+          "passed": false,
+          "rationale": "cited 18/19 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 0.0,
+          "weight": 1.0,
+          "passed": false,
+          "rationale": "refused, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 30 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 12938
+    },
+    {
+      "case_id": "992f8ccdbb1e841f",
+      "category": "comparison",
+      "output": "Using an alias makes the parameter name more readable and avoids the need to change the actual parameter name in the code, which can improve code clarity and API usability [C1][C5]._aliases make the parameter name more readable and avoid the need to change the actual parameter name in the code, which can improve code clarity and API usability [C1]._aliases make the parameter name more readable and avoid the need to change the actual parameter name in the code, which can improve code clarity and API usability [C1].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 12 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3607
+    },
+    {
+      "case_id": "a2070f6493e265c2",
+      "category": "comparison",
+      "output": "When using FastAPI versions before 0.99.0, OpenAPI used an older, modified JSON Schema that did not include examples [C2][C4]. FastAPI 0.99.0 and above switched to OpenAPI 3.1.0 and JSON Schema 2020-12, which added the new examples field that takes precedence over the old single example field [C2][C4]. FastAPI 0.99.0 also added support for the openapi_examples parameter to declare the same OpenAPI-specific examples field that existed before [C3][C5]. This change makes examples appear in the OpenAPI docs and the docs UI, and FastAPI 0.99.0 added support for openapi_examples in FastAPI 0.103.0 [C3][C5].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 4/4 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 16 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 4818
+    },
+    {
+      "case_id": "cf39a5cd9f6cc9fb",
+      "category": "comparison",
+      "output": "I refuse because the provided excerpts do not include documentation for FastAPI's security dependencies, so I cannot compare them. The excerpts do describe Grafana's InfluxDB data source troubleshooting, including missing URL errors, and they document handling query errors in Grafana Alerting [C1][C2][C3][C4][C6][C7].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 0.5,
+          "weight": 2.0,
+          "passed": false,
+          "rationale": "cited 1/2 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 0.0,
+          "weight": 1.0,
+          "passed": false,
+          "rationale": "refused, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 15 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 2694
+    },
+    {
+      "case_id": "55b8123919a65d30",
+      "category": "comparison",
+      "output": "When formatting a legend as a table, other information such as associated values or placement might be displayed as well [C1][C3].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 13 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3299
+    },
+    {
+      "case_id": "6894aecba466c2e6",
+      "category": "comparison",
+      "output": "Assigning multiple group mappings to the same org_role with different org_id's can be done by creating a single group mapping entry for that org_role and then adding a separate group mapping entry for the same org_role with a different org_id, or by using a single group mapping entry for one org and a separate group mapping for another org when configuring LDAP [C1][C8].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 11 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 5913
+    },
+    {
+      "case_id": "8a5f4d3231c0f576",
+      "category": "comparison",
+      "output": "Use comma-separated org_mapping strings to map SAML organizations to Grafana organizations and to split users into more granular control, because the org_mapping option stores mappings in the database as JSON and the JSON syntax can contain spaces and special characters that must be escaped with backslashes [C1][C4].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 14 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 6349
+    },
+    {
+      "case_id": "97d28af7c69f364f",
+      "category": "comparison",
+      "output": "I refuse because the provided excerpts do not include any documentation about Tempo's 'with' clause or how to handle time-based muting in Grafana notification policies [C1][C2][C3][C4][C7][C8]. The excerpts instead document how to create Tempo recording rules and how to use the 'with' clause to make Tempo search deterministic [C1][C4]. The excerpts also explain that TraceQL search is non-deterministic and that you should append a 'with' clause to make results deterministic [C2][C7]. The excerpts further document that TraceQL alerting is experimental and that you should enable the tempoAlerting feature flag to use it [C3][C7]. The excerpts also explain that TraceQL search is non-deterministic and that you should append a 'with' clause to make results deterministic [C2][C7]. The excerpts also document that TraceQL alerting is experimental and that you should enable the tempoAlerting feature flag to use it [C3][C7]. The excerpts also document that TraceQL search is non-deterministic and that you should append a 'with' clause to make results deterministic [C2][C7]. The excerpts also document that TraceQL search is non-deterministic and that you should append a 'with' clause to make results deterministic [C2][C7]. The excerpts also document that TraceQL search is non-deterministic and that you should append a 'with' clause to make results deterministic [C2][C7]. The excerpts also document that TraceQL search is non-deterministic and that you should append a 'with' clause to make results deterministic [C2][C7]. The excerpts also document that TraceQL search is non-deterministic and that you should append a 'with' clause to make results deterministic [C2][C7]. The excerpts also document that TraceQL search is non-deterministic and that you should append a 'with' clause to make results deterministic [C2][C7]. The excerpts also document that TraceQL search is non-deterministic and that you should append a 'with' clause to make results deterministic [C2][C7]. The excerpts also document that TraceQL search is non-deterministic and that you should append a 'with' clause to make results deterministic [C2][C7]. The excerpts also document that TraceQL search is non-deterministic and that you should append a 'with' clause to make results deterministic",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 0.9333333333333333,
+          "weight": 2.0,
+          "passed": false,
+          "rationale": "cited 14/15 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 0.0,
+          "weight": 1.0,
+          "passed": false,
+          "rationale": "refused, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 40 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 9561
+    },
+    {
+      "case_id": "c468f4e7c198762c",
+      "category": "comparison",
+      "output": "I refuse because the provided excerpts do not include any information about managing notification timing and frequency for Prometheus Alertmanager integrations with third‑party services [C5][C6][C8]. The excerpts instead describe Grafana Alerting’s notification architecture and how it evaluates alert rules and sends notifications [C1][C4][C3]. The excerpts also describe the Alertmanager’s role in handling notifications and the Alertmanager’s gossip behavior to avoid duplicated notifications [C7]. The excerpts further describe that Alertmanager chooses availability over consistency, which can result in occasional duplicated or out-of‑order notifications [C7]. The excerpts also note that notifications and silences are persisted to the database periodically and that graceful shutdown behavior is considered [C7].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 5/5 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 0.0,
+          "weight": 1.0,
+          "passed": false,
+          "rationale": "refused, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 17 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3581
+    },
+    {
+      "case_id": "e75527995de169d9",
+      "category": "comparison",
+      "output": "I cannot answer because the provided excerpts do not include guidance on migrating Grafana Alerting resources to Grafana Cloud, the migration assistant limitations, or how to choose between creating alert rules based on Loki logs and migrating Grafana Alerting resources to Grafana Cloud [C1][C2][C3][C4][C5][C6][C7][C8]. The excerpts do state that the migration assistant can migrate Alerting resources and that you can create data source-managed alert rules for Prometheus, Loki, and Mimir, and that data source-managed rules are supported for horizontal scalability but can introduce operational complexity [C5]. The excerpts also state that you can configure Alertmanager architecture and that each Alertmanager manages its own independent notification resources [C6]. The excerpts further state that Alertmanager architecture separates rule evaluation from notification handling and that you can configure multiple Alertmanagers [C6]. The excerpts also state that Alertmanager uses the built-in Alertmanager and that Grafana Cloud includes an additional Alertmanager [C6]. The excerpts state that you can create alert rules in Grafana, configure Alertmanager, and choose whether to use Grafana-managed or data source-managed rules [C4][C5]. The excerpts also state that data source-managed rules are stored in the data source and can be converted into Grafana-managed rules [C5]. The excerpts state that you can create alert rules in Grafana, configure Alertmanager, and choose whether to use Grafana-managed or data source-managed rules [C4][C5]. The excerpts state that you can create alert rules in Grafana, configure Alertmanager, and choose whether to use Grafana-managed or data source-managed rules [C4][C5]. The excerpts state that you can create alert rules in Grafana, configure Alertmanager, and choose whether to use Grafana-managed or data source-managed rules [C4][C5]. The excerpts state that you can create alert rules in Grafana, configure Alertmanager, and choose whether to use Grafana-managed or data source-managed rules [C4][C5]. The excerpts state that you can create alert rules in Grafana, configure Alertmanager, and choose whether to use Grafana-managed or data source-managed rules [C4][C5]. The excerpts state that you can create alert rules in Grafana, configure Alertmanager, and choose whether to use Grafana-managed or data source-managed rules [C4][C5",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 13/13 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 0.0,
+          "weight": 1.0,
+          "passed": false,
+          "rationale": "refused, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 37 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 10326
+    },
+    {
+      "case_id": "12fe39a78b4f8ff8",
+      "category": "comparison",
+      "output": "The text wire format is human-readable, compresses well, and is efficient enough for programming use [C1][C2]. The protobuf wire format is binary and efficiently encoded, and it is preferred for exposer/ingestor implementations because of code generation and flexibility [C1][C2]. The protobuf format is also used in Prometheus 3.0 and is actively maintained [C4]. The protobuf format is marked as deprecated in OM 2.0 but the documentation still recommends using the protobuf wire format [C6]. The protobuf format is binary and efficient, and it is preferred for exposer/ingestor implementations [C2][C4]. The protobuf format is also used in OM 2.0 and is maintained [C6]. The protobuf format is binary and efficient, and it is preferred for exposer/ingestor implementations [C2][C4]. The protobuf format is binary and efficient, and it is preferred for exposer/ingestor implementations [C2][C4]. The protobuf format is binary and efficient, and it is preferred for exposer/ingestor implementations [C2][C4]. The protobuf format is binary and efficient, and it is preferred for exposer/ingestor implementations [C2][C4]. The protobuf format is binary and efficient, and it is preferred for exposer/ingestor implementations [C2][C4]. The protobuf format is binary and efficient, and it is preferred for exposer/ingestor implementations [C2][C4]. The protobuf format is binary and efficient, and it is preferred for exposer/ingestor implementations [C2][C4]. The protobuf format is binary and efficient, and it is preferred for exposer/ingestor implementations [C2][C4]. The protobuf format is binary and efficient, and it is preferred for exposer/ingestor implementations [C2][C4]. The protobuf format is binary and efficient, and it is preferred for exposer/ingestor implementations [C2][C4]. The protobuf format is binary and efficient, and it is preferred for exposer/ingestor implementations [C2][C4]. The protobuf format is binary and efficient, and it is preferred for exposer/ingestor implementations [C2][C4]. The protobuf format is binary and efficient, and it is preferred for exposer/ingestor implementations [C2][C4]. The protobuf format is binary and efficient",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 0.95,
+          "weight": 2.0,
+          "passed": false,
+          "rationale": "cited 19/20 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 43 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 8745
+    },
+    {
+      "case_id": "43ad71cd33a6bc70",
+      "category": "comparison",
+      "output": "The scrape target MUST use the protocol in the Accept header with the highest weighting that is supported by Prometheus [C1].\nIf no protocols are supported, the target MAY use a user-configured fallback scrape protocol [C1].\nIf no fallback is specified, the target MUST use PrometheusText0.0.4 as a last resort [C1].\nThe Accept header is constructed by listing each supported protocol with its MIME type and parameters, and for protobuf protocols it must specify \"delimited\" encoding [C8].\nFor PrometheusText1.0.0 and OpenMetricsText1.0.0, the escaping scheme parameter SHOULD be appended [C8].\nA catch-all */* with the lowest quality value SHOULD be appended [C8].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 6/6 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 14 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3494
+    },
+    {
+      "case_id": "697540fecfb29b13",
+      "category": "comparison",
+      "output": "Prometheus is designed for recording purely numeric time series and is suitable for machine-centric monitoring and service-oriented architectures [C6][C7]. It is reliable and can be used during outages, with single-server nodes that are autonomous and not depending on network storage or remote services [C6]. Prometheus supports multi-dimensional data collection and querying, has a powerful query language, and built-in historical data analysis [C7]. It is maintained by a number of companies and individuals, and it is fully open source [C2]. InfluxDB is an open-source time series database with a commercial option for scaling and clustering, was released almost a year after Prometheus, and is geared toward slightly different use cases [C1].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 5/5 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 14 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 4111
+    },
+    {
+      "case_id": "ad6f049e7abb23c5",
+      "category": "comparison",
+      "output": "Avoid native histogram samples as output values for alerts because rendering them in their simple text form is hard to read for humans [C1]. It is recommended to avoid native histograms as output values for alerts because rendering them in their simple text form is hard to read for humans [C1].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 2/2 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 13 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3106
+    },
+    {
+      "case_id": "da5bf6f70e091fdc",
+      "category": "comparison",
+      "output": "I refuse because the provided excerpts do not include information about Alertmanager webhook receivers or how to manage webhook receivers in Grafana Alerting [C4][C7]. The excerpts do describe Alertmanager webhook receivers and how to configure them, but they do not include a comparison or explanation of webhook receivers in the excerpts provided [C4][C7]. The excerpts do describe Alertmanager webhook receivers and how to configure them, but they do not include a comparison or explanation of webhook receivers in the excerpts provided [C4][C7]. The excerpts do describe Alertmanager webhook receivers and how to configure them, but they do not include a comparison or explanation of webhook receivers in the excerpts provided [C4][C7]. The excerpts do describe Alertmanager webhook receivers and how to configure them, but they do not include a comparison or explanation of webhook receivers in the excerpts provided [C4][C7]. The excerpts do describe Alertmanager webhook receivers and how to configure them, but they do not include a comparison or explanation of webhook receivers in the excerpts provided [C4][C7]. The excerpts do describe Alertmanager webhook receivers and how to configure them, but they do not include a comparison or explanation of webhook receivers in the excerpts provided [C4][C7]. The excerpts do describe Alertmanager webhook receivers and how to configure them, but they do not include a comparison or explanation of webhook receivers in the excerpts provided [C4][C7]. The excerpts do describe Alertmanager webhook receivers and how to configure them, but they do not include a comparison or explanation of webhook receivers in the excerpts provided [C4][C7]. The excerpts do describe Alertmanager webhook receivers and how to configure them, but they do not include a comparison or explanation of webhook receivers in the excerpts provided [C4][C7]. The excerpts do describe Alertmanager webhook receivers and how to configure them, but they do not include a comparison or explanation of webhook receivers in the excerpts provided [C4][C7]. The excerpts do describe Alertmanager webhook receivers and how to configure them, but they do not include a comparison or explanation of webhook receivers in the excerpts provided [C4][C7]. The excerpts do describe Alertmanager webhook receivers and how to configure them, but they do not include a comparison or explanation of webhook receivers in the excerpts provided [C4][C7]. The excerpts do describe Alertmanager webhook receivers and how to configure them, but they do not include a comparison or explanation of webhook receivers in the excerpts provided [C4][C",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 14/14 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 0.0,
+          "weight": 1.0,
+          "passed": false,
+          "rationale": "refused, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 36 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 7587
+    },
+    {
+      "case_id": "e6e8d9d282aeffef",
+      "category": "comparison",
+      "output": "Typically alert on high latency and error rates as high up in the stack as possible. [C1]\nOnly page on user-visible errors when there are errors further down the stack. [C1]\nFor error rates, page on user-visible errors. [C1]\nIf there are errors further down the stack that will cause such a failure, there is no need to page on those errors separately. [C1]\nIf some failures are not user-visible but are otherwise severe enough to require human involvement, add pages to be sent on those. [C1]\nYou may need alerts for different request types if they have different characteristics, or problems in a low-traffic request would be drowned out by high-traffic requests. [C1]",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 6/6 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 14 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 4618
+    },
+    {
+      "case_id": "0f5f88ae661d71f0",
+      "category": "comparison",
+      "output": "I can’t answer because the provided excerpts do not include any guidance about preferring customizing JSON schemas in Pydantic versus excluding parameters from FastAPI’s OpenAPI documentation [C1][C2][C3][C4][C5][C6][C7][C8]. The excerpts instead document FastAPI’s include_in_schema parameter and how to exclude path operations from OpenAPI [C4]. The excerpts also document FastAPI’s separate_input_output_schemas parameter and how to disable separate input/output schemas [C7]. The excerpts also document Pydantic’s json_schema generation and customization options [C3][C6].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 4/4 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 0.0,
+          "weight": 1.0,
+          "passed": false,
+          "rationale": "refused, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 20 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3475
+    },
+    {
+      "case_id": "15cf32d26b045b18",
+      "category": "comparison",
+      "output": "BeforeValidator run after the whole model is validated and are instance methods that can be seen as post-initialization hooks. [C1][C8]\nThey are run before the model is instantiated and can be called on the raw input, which can be any arbitrary object. [C8]\nThey are the most flexible of all validators because you can run code before or after validation, or terminate validation immediately. [C3]\nAfterValidator run after Pydantic's internal validation and are generally more type-safe and easier to implement. [C1]\nThey can be defined with the @field_validator decorator or with the annotated pattern. [C1]\nThey can be defined with the @model_validator decorator. [C8]\nWrapValidator is the most flexible because you can run code before or after validation, terminate validation immediately, or return the value early. [C3]\nThey can be defined with the @field_validator decorator or with the annotated pattern. [C1]\nThey can be defined with the @model_validator decorator. [C8]\nAfterValidator run after Pydantic's internal validation and are generally more type-safe and easier to implement. [C1]\nThey can be defined with the @field_validator decorator or with the annotated pattern. [C1]\nThey can be defined with the @model_validator decorator. [C8]\nBeforeValidator run before the model is instantiated and are more flexible because they can take arbitrary input and mutate the raw value. [C8]\nThey are the most flexible because you can run code before or after validation, terminate validation immediately, or return the value early. [C3]\nAfterValidator run after Pydantic's internal validation and are generally more type-safe and easier to implement. [C1]\nThey can be defined with the @field_validator decorator or with the annotated pattern. [C1]\nThey can be defined with the @model_validator decorator. [C8]\nAfterValidator run after Pydantic's internal validation and are generally more type-safe and easier to implement. [C1]\nThey can be defined with the @field_validator decorator or with the annotated pattern. [C1]\nThey can be defined with the @model_validator decorator. [C8]\nAfterValidator run after Pydantic's internal validation and are generally more type-safe and easier to implement. [C1]\nThey can be defined with the @field_validator decorator or with the annotated pattern. [C1]\nThey can be defined with the @model_validator decorator. [C8]\nAfterValidator run after Py",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 0.9583333333333334,
+          "weight": 2.0,
+          "passed": false,
+          "rationale": "cited 23/24 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 32 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 12133
+    },
+    {
+      "case_id": "2c43adfa633f3e4e",
+      "category": "comparison",
+      "output": "I refuse because the provided excerpts do not include information about Grafana's query editor or how to set alias patterns in Grafana [C8]. The excerpts do include information about field aliases in pydantic, but they do not document Grafana's Alias By feature or how to set alias patterns [C8]. The excerpts do include information about using aliases for validation and serialization in pydantic, but they do not include information about Grafana's Alias By feature [C8]. The excerpts do include information about using aliases for model validation and serialization in pydantic, but they do not include information about Grafana's Alias By feature [C8]. The excerpts do include information about using aliases for model validation and serialization in pydantic, but they do not include information about Grafana's Alias By feature [C8]. The excerpts do include information about using aliases for model validation and serialization in pydantic, but they do not include information about Grafana's Alias By feature [C8]. The excerpts do include information about using aliases for model validation and serialization in pydantic, but they do not include information about Grafana's Alias By feature [C8]. The excerpts do include information about using aliases for model validation and serialization in pydantic, but they do not include information about Grafana's Alias By feature [C8]. The excerpts do include information about using aliases for model validation and serialization in pydantic, but they do not include information about Grafana's Alias By feature [C8]. The excerpts do include information about using aliases for model validation and serialization in pydantic, but they do not include information about Grafana's Alias By feature [C8]. The excerpts do include information about using aliases for model validation and serialization in pydantic, but they do not include information about Grafana's Alias By feature [C8]. The excerpts do include information about using aliases for model validation and serialization in pydantic, but they do not include information about Grafana's Alias By feature [C8]. The excerpts do include information about using aliases for model validation and serialization in pydantic, but they do not include information about Grafana's Alias By feature [C8]. The excerpts do include information about using aliases for model validation and serialization in pydantic, but they do not include information about Grafana's Alias By feature [C8]. The excerpts do include information about using aliases for model validation and serialization in pydantic, but they do not include information about Grafana's Alias By",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 0.9333333333333333,
+          "weight": 2.0,
+          "passed": false,
+          "rationale": "cited 14/15 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 0.0,
+          "weight": 1.0,
+          "passed": false,
+          "rationale": "refused, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 22 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 13097
+    },
+    {
+      "case_id": "4b0960acedd4ff35",
+      "category": "comparison",
+      "output": "Proactively calling model_rebuild() builds a core schema used for validation and serialization, and it builds the core schema for all types at all levels before calling model_rebuild() [C1]. Because the core schema is built first, the model_rebuild() call is able to detect and resolve forward annotations automatically without needing to rebuild the model itself [C1]. The biggest change is that when calling model_rebuild() on the outermost model, it builds a full core schema used for validation of the whole model (nested models and all), so all types at all levels need to be ready before model_rebuild() is called [C1].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 3/3 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 12 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 7632
+    },
+    {
+      "case_id": "6d35e3c4150708ac",
+      "category": "comparison",
+      "output": "I cannot answer because the provided excerpts do not include information about Pydantic's configuration system or how to compare it to Prometheus's content negotiation [C5][C6][C7][C8]. The excerpts do describe Prometheus's content negotiation behavior and include guidance on configuration for Pydantic [C1][C2][C3][C4][C6][C7][C8]. The excerpts do not include information about Pydantic's configuration system or how to compare it to the documentation excerpts provided [C5][C6][C7][C8]. The excerpts do include guidance on configuration for Pydantic and how to merge or override settings [C5]. The excerpts do not include information about Pydantic's configuration system or how to compare it to the documentation excerpts provided [C5][C6][C7][C8]. The excerpts do include guidance on configuration for Pydantic and how to merge or override settings [C5]. The excerpts do not include information about Pydantic's configuration system or how to compare it to the provided excerpts [C5][C6][C7][C8]. The excerpts do include guidance on configuration for Pydantic and how to merge or override settings [C5]. The excerpts do not include information about Pydantic's configuration system or how to compare it to the provided excerpts [C5][C6][C7][C8]. The excerpts do include guidance on configuration for Pydantic and how to merge or override settings [C5]. The excerpts do not include information about Pydantic's configuration system or how to compare it to the provided excerpts [C5][C6][C7][C8]. The excerpts do include guidance on configuration for Pydantic and how to merge or override settings [C5]. The excerpts do not include information about Pydantic's configuration system or how to compare it to the provided excerpts [C5][C6][C7][C8]. The excerpts do include guidance on configuration for Pydantic and how to merge or override settings [C5]. The excerpts do not include information about Pydantic's configuration system or how to compare it to the provided excerpts [C5][C6][C7][C8]. The excerpts do include guidance on configuration for Pydantic and how to merge or override settings [C5]. The excerpts do not include information about Pydantic's configuration system or how to compare it to the provided excerpts [C5][C6][C",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 17/17 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 0.0,
+          "weight": 1.0,
+          "passed": false,
+          "rationale": "refused, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 57 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 7554
+    },
+    {
+      "case_id": "d05c3b02f54fc521",
+      "category": "comparison",
+      "output": "I cannot answer because the provided excerpts do not include any information about the deprecated Field(deprecated=...) approach in Pydantic models [C1][C2][C3][C4][C5][C6][C7][C8]. The excerpts instead document the deprecated Field parameter and how to mark fields as deprecated using the deprecated decorator [C1][C2][C3][C4][C5][C6][C7][C8].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 2/2 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 0.0,
+          "weight": 1.0,
+          "passed": false,
+          "rationale": "refused, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 25 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 4251
+    },
+    {
+      "case_id": "1b1acb5b4598203c",
+      "category": "factual",
+      "output": "I cannot answer because the provided excerpts do not mention why the chat system should not be used for asking questions about FastAPI [C1][C2]. The excerpts instead state that the chat should be used for general conversations and that using the chat for questions is discouraged because it can lead to too general questions and difficulty in receiving answers [C1][C2]. The excerpts also state that the chat is not as searchable as GitHub discussions and that you should use the template to write questions so you can get better answers [C2].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 3/3 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 0.0,
+          "weight": 1.0,
+          "passed": false,
+          "rationale": "refused, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 13 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 4150
+    },
+    {
+      "case_id": "3f95547f6fe7311e",
+      "category": "factual",
+      "output": "The docstring uses the YAML format inside the Python docstring to define the schema.[C1]",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 9 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3308
+    },
+    {
+      "case_id": "636d6b35c84f90cb",
+      "category": "factual",
+      "output": "The two main approaches mentioned are building your own image from scratch for most cases (for example using Kubernetes or Raspberry Pi) and using a single-file FastAPI deployment (for example main.py without an app directory) [C8][C1].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 10 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 2230
+    },
+    {
+      "case_id": "63ed8a571f0eae0a",
+      "category": "factual",
+      "output": "The FastAPI response classes FileResponse, HTMLResponse, JSONResponse, ORJSONResponse, PlainTextResponse, RedirectResponse, Response, StreamingResponse, UJSONResponse, and UResponse are mentioned as deprecated for optimizing JSON performance [C1][C6].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 11 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 2878
+    },
+    {
+      "case_id": "8d9c99752bca8203",
+      "category": "factual",
+      "output": "Visit http://127.0.0.1:8000/static/redoc.standalone.js to verify if ReDoc's static JavaScript is being served correctly in your FastAPI app [C1].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 9 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3442
+    },
+    {
+      "case_id": "d337464475765e26",
+      "category": "factual",
+      "output": "SQLModel is recommended to simplify interaction with SQL databases in FastAPI [C1][C6].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 10 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 2180
+    },
+    {
+      "case_id": "2c4d8a476d93c76c",
+      "category": "factual",
+      "output": "The Empty query results troubleshooting section for the Elasticsearch data source lists common causes and solutions such as incorrect time ranges, Lucene query syntax errors, testing the query in Elasticsearch with the _search API, and ensuring the index contains documents matching the query filters [C2].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 10 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 2662
+    },
+    {
+      "case_id": "2fb2b4c5839ad099",
+      "category": "factual",
+      "output": "You can set an expiration time when publishing a panel snapshot.[C1]",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 11 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3398
+    },
+    {
+      "case_id": "31714d8e4162e286",
+      "category": "factual",
+      "output": "You must enable the Cloud Monitoring API under Access scopes for a GCE instance to allow read-only access to monitoring data [C1].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 10 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3617
+    },
+    {
+      "case_id": "38e4fc1594aace51",
+      "category": "factual",
+      "output": "The suffix is \"+security\". [C1]",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 9 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3097
+    },
+    {
+      "case_id": "cbc8385fe31b2755",
+      "category": "factual",
+      "output": "The formula is: max($__interval + scrape_interval, 4 * scrape_interval). [C4]",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 9 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 2180
+    },
+    {
+      "case_id": "f4c3b75a1158617a",
+      "category": "factual",
+      "output": "Click Dashboards in the main menu to open Dashboards → Playlists → New playlist [C1].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 11 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 4325
+    },
+    {
+      "case_id": "59d86dbc34cd2c6d",
+      "category": "factual",
+      "output": "The main Prometheus server runs as a single static binary called prometheus (or prometheus.exe on Windows) and has no external dependencies [C1][C5].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 10 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 1900
+    },
+    {
+      "case_id": "7b83751d829763bf",
+      "category": "factual",
+      "output": "I refuse because the provided excerpts do not mention a function named histogram_count(), so I cannot answer what it returns from these documents [C1][C2][C3][C4][C5][C6][C7][C8]. The excerpts instead describe PromQL functions such as histogram_quantile(), explain how to calculate quantiles, and note that histogram_count() is not documented in the excerpts [C4][C5][C6][C7][C8]. The excerpts do cover histogram concepts including native histograms and their data model, but they do not include documentation for histogram_count() [C2][C3][C4][C5][C6][C7][C8].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 3/3 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 0.0,
+          "weight": 1.0,
+          "passed": false,
+          "rationale": "refused, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 28 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 5818
+    },
+    {
+      "case_id": "8cfba63dd5aab5e1",
+      "category": "factual",
+      "output": "I cannot apply the information about the Prometheus security model libraries if you modify the Prometheus source code because the information is not applicable to modified source code [C1][C2]. The provided documentation excerpts do not include guidance about modifying the Prometheus source code or using Prometheus internals beyond the official client library APIs [C1][C2]. The excerpts do state that the Prometheus security model is intended for vanilla binaries built from the stock source code and that information not in the excerpts does not apply to modified source code [C1][C2].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 3/3 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 0.0,
+          "weight": 1.0,
+          "passed": false,
+          "rationale": "refused, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 14 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 4126
+    },
+    {
+      "case_id": "9856eec048098714",
+      "category": "factual",
+      "output": "The field name used to indicate the schema number in the native histogram bucket text format is \"schema\". [C1][C2][C7]",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 11 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 7089
+    },
+    {
+      "case_id": "a82a75cab326825d",
+      "category": "factual",
+      "output": "The default formatter is PromConsole.NumberFormatter.humanize [C1].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 9 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 2845
+    },
+    {
+      "case_id": "e6efba19ee2a02a5",
+      "category": "factual",
+      "output": "Exemplars exposed as part of a classic histogram MAY be used by native histograms if they have a timestamp [C1]. Exemplars for native histograms are attached to the histogram sample as a whole, not to individual buckets, and TSDB MAY rely on the assumption that any new exemplar has a more recent timestamp than any of the previously exposed exemplars [C2]. Duplicate detection is possible in an efficient way by sorting the newly ingested native histogram exemplars by first timestamp, then value, then labels, appending them in sorted order, and handling append failures for exemplars that would be sorted before or equal to the last successfully appended exemplar [C2]. Exemplars that would be sorted after the last successfully appended exemplar succeed, and exemplars that would be sorted before or equal to the last successfully appended exemplar are considered acceptable [C2].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 4/4 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 12 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 7892
+    },
+    {
+      "case_id": "71ec19bccee87dc8",
+      "category": "factual",
+      "output": "The attribute is repeat.raw_function [C1].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 9 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 2581
+    },
+    {
+      "case_id": "882f92816f22cbd8",
+      "category": "factual",
+      "output": "The default validation mode for union validation in Pydantic is 'smart'. [C2]",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 9 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 5121
+    },
+    {
+      "case_id": "9522476ec6fc235a",
+      "category": "factual",
+      "output": "The following configuration settings were removed in Pydantic V2: allow_mutation, error_msg_templates, and fields [C2].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 9 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 1806
+    },
+    {
+      "case_id": "a3431b723ffcd5c3",
+      "category": "factual",
+      "output": "The property is ValidationInfo.data.[C2]",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 9 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 2427
+    },
+    {
+      "case_id": "afe98db2bb12891b",
+      "category": "factual",
+      "output": "The 'fruit' attribute in the ApplePie model example has no default value; it must be explicitly set to 'apple'. [C1][C2]",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 10 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3208
+    },
+    {
+      "case_id": "ffcd3c172e4ac1b2",
+      "category": "factual",
+      "output": "You can pass the config parameter to the dataclass decorator to customize its behavior in addition to the standard dataclass parameters [C4][C1].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 11 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 4324
+    },
+    {
+      "case_id": "2a9d9a0ba0559b29",
+      "category": "howto",
+      "output": "I refuse because the provided excerpts do not mention how to make a FastAPI route automatically decompress request bodies using a custom request class [C1][C2][C3][C4][C5][C6][C7][C8]. The excerpts instead document creating a custom Request subclass to decompress gzip requests and using APIRoute to create a GzipRequest, and they explain that the only thing the function returned by GzipRequest.get_route_handler does is convert the Request to a GzipRequest [C2][C3].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 2/2 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 0.0,
+          "weight": 1.0,
+          "passed": false,
+          "rationale": "refused, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 18 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3213
+    },
+    {
+      "case_id": "3e99833cfc3e0e58",
+      "category": "howto",
+      "output": "Import Jinja2Templates and create a templates object, then declare a Request parameter in the path operation to return the template, and render the template with the templates you created [C4][C2].\nUse the templates you created to render and return a TemplateResponse, pass the template name, the request object, and a context dictionary with key-value pairs to be used inside the Jinja2 template [C4].\nYou can also use url_for() inside the template, for example, to link to a CSS file at static/styles.css [C5].\nYou can also use StaticFiles with the name \"static\" to serve CSS automatically [C5].\nBefore FastAPI 0.108.0, the name was the first parameter, and request was passed as part of the key-value context before that [C4].\nIf you need a unique ID for a path operation, use the generate_unique_id_function parameter [C6].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 6/6 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 15 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 4394
+    },
+    {
+      "case_id": "a119be4a928f43bd",
+      "category": "howto",
+      "output": "Declare the query parameters, cookies, and headers in a Pydantic model and then declare them as Query, Cookie, or Header, for example: {C1} repo=fastapi | Cookie Parameter Models\nDeclare the cookie parameters in a Pydantic model and then declare them as Cookie, for example: {C1}\nDeclare the query parameters in a Pydantic model and then declare them as Query, for example: {C1}\nDeclare the query parameters in a Pydantic model and then declare them as Query, for example: {C1}\nDeclare the query parameters in a Pydantic model and then declare them as Query, for example: {C1}\nDeclare the query parameters in a Pydantic model and then declare them as Query, for example: {C1}\nDeclare the query parameters in a Pydantic model and then declare them as Query, for example: {C1}\nDeclare the query parameters in a Pydantic model and then declare them as Query, for example: {C1}\nDeclare the query parameters in a Pydantic model and then declare them as Query, for example: {C1}\nDeclare the query parameters in a Pydantic model and then declare them as Query, for example: {C1}\nDeclare the query parameters in a Pydantic model and then declare them as Query, for example: {C1}\nDeclare the query parameters in a Pydantic model and then declare them as Query, for example: {C1}\nDeclare the query parameters in a Pydantic model and then declare them as Query, for example: {C1}\nDeclare the query parameters in a Pydantic model and then declare them as Query, for example: {C1}\nDeclare the query parameters in a Pydantic model and then declare them as Query, for example: {C1}\nDeclare the query parameters in a Pydantic model and then declare them as Query, for example: {C1}\nDeclare the query parameters in a Pydantic model and then declare them as Query, for example: {C1}\nDeclare the query parameters in a Pydantic model and then declare them as Query, for example: {C1}\nDeclare the query parameters in a Pydantic model and then declare them as Query, for example: {C1}\nDeclare the query parameters in a Pydantic model and then declare them as Query, for example: {C1}\nDeclare the query parameters in a Pydantic model and then declare",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 0.0,
+          "weight": 2.0,
+          "passed": false,
+          "rationale": "cited 0/21 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 8 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 7115
+    },
+    {
+      "case_id": "d99b53caabf191d4",
+      "category": "howto",
+      "output": "Import httpx and add it to your project with uv add httpx [C2]\nCreate a TestClient by passing your FastAPI app to it [C2]\nCreate functions that start with test_ and call the TestClient normally [C2]\nUse the TestClient object the same way as httpx [C2]\nWrite assert statements with normal Python expressions [C2]\nNote that the TestClient receives data that can be converted to JSON [C4]\nIf you need to send JSON bodies, use json, data, or data parameters [C4]\nFor headers, use headers parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor form data, use data parameter [C4]\nFor streaming, use streaming parameter [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies parameter with dict [C4]\nFor cookies, use cookies",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 40/40 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 49 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 7822
+    },
+    {
+      "case_id": "ec2b2e7b90fe7518",
+      "category": "howto",
+      "output": "Put it in a dependency module, for example app/dependencies.py, and declare it as a dependency with Depends(...). [C1]\nFor example: oauth2_scheme = Depends(OAuth2PasswordBearer). [C2]\nYou can also use the OAuth2PasswordRequestForm class as a dependency, and it will be added to the OpenAPI schema. [C8]\nAlternatively, you can create a custom dependency class that reads the X-Token header and returns it. [C1]",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 4/4 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 12 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 4163
+    },
+    {
+      "case_id": "f59fcd3b5ef6b200",
+      "category": "howto",
+      "output": "I can't provide instructions because the provided excerpts do not mention a 'response_model' parameter or how to declare additional responses in the OpenAPI schema [C1][C2][C3][C4][C6][C8]. The excerpts do show how to declare responses with status codes and model keys in the OpenAPI schema [C1][C2][C3][C4][C6][C8]. The excerpts also show how to declare response models and include them in the OpenAPI schema [C1][C4][C6][C8]. The excerpts explain that FastAPI will generate the JSON Schema for responses and put it in the correct place in the OpenAPI schema [C1][C4][C6][C8]. The excerpts also show how to declare response models and include them in the OpenAPI schema [C1][C4][C6][C8]. The excerpts explain that FastAPI will generate the JSON Schema for responses and put it in the correct place in the OpenAPI schema [C1][C4][C6][C8]. The excerpts also show how to declare response models and include them in the OpenAPI schema [C1][C4][C6][C8]. The excerpts explain that FastAPI will generate the JSON Schema for responses and put it in the correct place in the OpenAPI schema [C1][C4][C6][C8]. The excerpts also show how to declare response models and include them in the OpenAPI schema [C1][C4][C6][C8]. The excerpts explain that FastAPI will generate the JSON Schema for responses and put it in the correct place in the OpenAPI schema [C1][C4][C6][C8]. The excerpts also show how to declare response models and include them in the OpenAPI schema [C1][C4][C6][C8]. The excerpts explain that FastAPI will generate the JSON Schema for responses and put it in the correct place in the OpenAPI schema [C1][C4][C6][C8]. The excerpts also show how to declare response models and include them in the OpenAPI schema [C1][C4][C6][C8]. The excerpts explain that FastAPI will generate the JSON Schema for responses and put it in the correct place in the OpenAPI schema [C1][C4][C6][C8]. The excerpts also show how to declare response models and include them in the OpenAPI schema [",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 0.9333333333333333,
+          "weight": 2.0,
+          "passed": false,
+          "rationale": "cited 14/15 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 0.0,
+          "weight": 1.0,
+          "passed": false,
+          "rationale": "refused, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 68 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 8405
+    },
+    {
+      "case_id": "1ef7124bfc195e75",
+      "category": "howto",
+      "output": "Run docker compose build to build the Grafana stack after cloning the repository [C2][C3][C4].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 11 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3928
+    },
+    {
+      "case_id": "316a866576888dcc",
+      "category": "howto",
+      "output": "Assign a Key Vault access policy to the key vault by opening the Key Vault and selecting the key you want to protect. [C1]\nIn the Key Permissions section, set encrypt and decrypt permissions and click Save. [C1]\nIn the Key Permissions section, set encrypt and decrypt permissions and click Save. [C1]",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 3/3 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 13 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 6868
+    },
+    {
+      "case_id": "43ea4df850e0b2f7",
+      "category": "howto",
+      "output": "Sign in to Grafana as a server administrator, click Administration → Users and access → Users, and open the Users list. [C1][C2]\nClick a user, then in the Organizations section click Add user to organization, select an organization and a role, and click Add to organization. [C1]\nIf you already have organization administrator privileges, you can still add users by inviting them to join an organization. [C1]\nIf you have server administrator permissions, you can also manually add a user to an organization. [C6]\nIf you need to change a user’s organization role, sign in as an organization administrator, open the Users list, locate the user, and click the role. [C7]\nIf you have server admin permissions, you can also change a user’s role in the Server Admin section. [C6]",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 6/6 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 16 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 4439
+    },
+    {
+      "case_id": "6a7c6b6aeb9885c6",
+      "category": "howto",
+      "output": "Enable MQTT client certificate authentication by configuring clientCertificate and clientKey in the MQTT settings [C7][C7]. The clientCertificate and clientKey encrypt data between the client and server, and you must provide both the certificate and the key [C7].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 2/2 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 14 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3848
+    },
+    {
+      "case_id": "eca5339ff371bf42",
+      "category": "howto",
+      "output": "Click Query inspector, click the Data tab, and then click Download logs to download the log results as a TXT file [C1][C3].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 10 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 1885
+    },
+    {
+      "case_id": "f64e8c75c3bec4da",
+      "category": "howto",
+      "output": "Simulate CPU and memory usage with a Flask script that generates random CPU and memory values every 10 seconds and exposes them as Prometheus metrics. [C1][C2]\nThe script simulates random CPU and memory usage values (10% to 100%) every 10 seconds and exposes them as Prometheus metrics. [C2]\nThe script generates CPU and memory usage values (10% to 100%) every 10 seconds and exposes them as Prometheus metrics. [C2]\nThe script simulates CPU and memory usage values (10% to 100%) every 10 seconds and exposes them as Prometheus metrics. [C2]\nThe script generates CPU and memory usage values (10% to 100%) every 10 seconds and exposes them as Prometheus metrics. [C2]\nThe script simulates CPU and memory usage values (10% to 100%) every 10 seconds and exposes them as Prometheus metrics. [C2]\nThe script generates CPU and memory usage values (10% to 100%) every 10 seconds and exposes them as Prometheus metrics. [C2]\nThe script simulates CPU and memory usage values (10% to 100%) every 10 seconds and exposes them as Prometheus metrics. [C2]\nThe script generates CPU and memory usage values (10% to 100%) every 10 seconds and exposes them as Prometheus metrics. [C2]\nThe script simulates CPU and memory usage values (10% to 100%) every 10 seconds and exposes them as Prometheus metrics. [C2]\nThe script generates CPU and memory usage values (10% to 100%) every 10 seconds and exposes them as Prometheus metrics. [C2]\nThe script simulates CPU and memory usage values (10% to 100%) every 10 seconds and exposes them as Prometheus metrics. [C2]\nThe script generates CPU and memory usage values (10% to 100%) every 10 seconds and exposes them as Prometheus metrics. [C2]\nThe script simulates CPU and memory usage values (10% to 100%) every 10 seconds and exposes them as Prometheus metrics. [C2]\nThe script generates CPU and memory usage values (10% to 100%) every 10 seconds and exposes them",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 0.9333333333333333,
+          "weight": 2.0,
+          "passed": false,
+          "rationale": "cited 14/15 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 23 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 9215
+    },
+    {
+      "case_id": "13ea1db28b5bdd89",
+      "category": "howto",
+      "output": "Represent all unpopulated positive buckets explicitly by listing their offsets and lengths in a positive_span list, for example: positive_span: [0:3, 2:2, 2:1, 3:0, 1:0, 0:1, 2:1, 3:0, 4:3, 5:2, 2:1, 3:0, 4:3, 5:2, 2:1, 3:0, 4:3, 5:2, 3:0, 4:3, 0:1, 2:1, 3:0, 4:3, 0:1, 2:1, 3:0, 4:3, 0:1, 2:1, 3:0, 4:3, 0:1, 2:1, 3:0, 4:3, 0:1, 2:1, 3:0, 4:3, 0:1, 2:1, 3:0, 4:3, 0:1, 2:1, 3:0, 4:3, 0:1, 2:1, 3:0, 4:3, 0:1, 2:1, 3:0, 4:3, 0:1, 2:1, 3:0, 4:3, 0:1, 2:1, 3:0, 4:3, 0:1, 2:1, 3:0, 4:3, 0:1, 2:1, 3:0, 4:3, 0:1, 2:1, 3:0, 4:3, 0:1, 2:1, 3:0, 4:3, 0:1, 2:1, 3:0, 4:3, 0:1, 2:1, 3:0, 4:3, 0:1, 2:1, 3:0, 4:3, 0:1, 2:1, 3:0, 4:3, 0:1, ",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 0.0,
+          "weight": 2.0,
+          "passed": false,
+          "rationale": "cited 0/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 8 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 14422
+    },
+    {
+      "case_id": "612b7216d6229934",
+      "category": "howto",
+      "output": "Use rate(container_network_transmit_bytes_total[1m]) to get bytes transmitted per second for all containers [C1].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 9 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3492
+    },
+    {
+      "case_id": "85d52fa3781c24e2",
+      "category": "howto",
+      "output": "Represent a single unpopulated bucket explicitly by adding an explicit zero-length span before the first span in the positive bucket list [C1][C2]. For example: positive_buckets = [0:1, 1:2, 3:4]. [C1][C2]",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 2/2 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 12 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 8015
+    },
+    {
+      "case_id": "a8e6b114eb4bea67",
+      "category": "howto",
+      "output": "Update your client libraries to use OpenMetrics 2.0 Start Timestamps by removing the separate _created samples and exposing inline Start Timestamps (st@) on the sample line instead [C1][C2].\nThis change reduces exposition size and avoids race conditions between _created samples and the value sample [C2].\nCounters, histograms, and summaries support Start Timestamps, while gauges do not [C2].\nIn OM 2.0, metric_name must exactly match its MetricFamily name, implicit suffix stripping is removed, and _total suffix for counters is SHOULD instead of MUST [C3].\nNative histograms with exponential bucket schemas were introduced, UTF-8 metric and label names with quoting are allowed, exemplar timestamps are mandatory, and synthetic zero samples should be used to avoid spurious counter resets [C3][C4].\nStart timestamps are useful for native histograms and the counter reset information of synthetic zero samples is always set to CounterReset [C4].\nIn short, the OM 2.0 Start Timestamp guidance says you should inline st@ with the sample value and avoid separate _created samples [C2].\nBecause timestamps are created at the time of metric creation/reset, the OM 2.0 guidance recommends using the sample timestamp rather than the created timestamp [C5].\nIf you expose timestamps, the ingestor should apply its own timestamp rather than the exposer's system time [C5].\nExemplar timestamps are mandatory, and multiple exemplars per sample are allowed [C5].\nThe counter reset information of synthetic zero samples is always set to CounterReset [C4].\nIn short, the OM 2.0 guidance says you should inline st@ with the sample value and avoid separate _created samples [C2].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 12/12 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 24 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 9747
+    },
+    {
+      "case_id": "ea46f56f30e90abb",
+      "category": "howto",
+      "output": "Use the histogram_sum(rate(rate(http_request_duration_seconds[5m]))) / histogram_count(rate(http_request_duration_seconds[5m])) expression to calculate the average request duration from a Summary metric in Prometheus during aggregation. [C2]",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 1/1 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 9 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 5380
+    },
+    {
+      "case_id": "fd84fdaf06db2992",
+      "category": "howto",
+      "output": "When aggregating ratio metrics, treat the numerator and denominator separately and then divide the aggregated ratios instead of taking the average of a ratio or an average of an average [C1].\nFor example, when aggregating _count and _sum of a Summary and dividing to calculate average observation size, keep the metric name without the _count or _sum suffix and replace the rate with mean [C1].\nAlways specify a without clause with the labels you are aggregating away so you preserve other labels such as job [C1].\nDo not expose raw counters or precalculate rates on the target because that throws away information and ingestors should evaluate raw values and use PromQL for aggregations [C5][C7].\nRecorded metrics are not guaranteed to exactly match the original raw data, and aggregations can produce results that differ from the original raw data [C6].\nShorter evaluation intervals improve resolution, so shorter intervals reduce the gap [C6].\nPromQL recommends evaluating the aggregation first and then aggregating the results instead of aggregating first and then evaluating [C6].\nExposing separate counters for failed requests and total requests is preferable to a request failure ratio [C5].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 8/8 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 17 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 5800
+    },
+    {
+      "case_id": "05be2395e2588f97",
+      "category": "howto",
+      "output": "Run the following commands in the terminal to set the Python environment for Pydantic in VS Code: \n\nOpen the terminal, run pip install pydantic, and then run uv add pydantic to install Pydantic. [C8][C1]\nThen, configure VS Code to use the environment by opening the User Settings, searching for Mypy Enabled, and checking the box. [C2]\nIf you prefer, you can also configure mypy in VS Code to get inline error checks, and enable mypy via the User Settings. [C2]\nAlternatively, install the Pylance extension for VS Code and enable it via the Python Extension. [C4]\nYou can also install the pydantic-settings package and use it in your project. [C7]\nFinally, ensure your editor or IDE is configured to use the same Python environment and settings as the one where Pydantic is installed. [C8]",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 0.8571428571428571,
+          "weight": 2.0,
+          "passed": false,
+          "rationale": "cited 6/7 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 15 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 3422
+    },
+    {
+      "case_id": "45e9ad480c626da8",
+      "category": "howto",
+      "output": "Set init_forbid_extra to False to allow extra arguments to be synthesized into the __init__ method unless init_forbid_extra is set or the extra configuration is set to 'forbid'. [C2][C3]\nSet init_typed to False to prevent field annotations from being used when synthesizing __init__, unless init_typed is set or strict mode is enabled. [C3]\nIf you want to change the generated signature globally, create a custom parent BaseModel with model_config = ConfigDict(...), and subclasses inherit and merge their model_config. [C8]\nIf you need to include a **kwargs parameter in __init__, set extra to 'allow' and annotate __pydantic_extra__ with the extra data. [C7]\nFor extra data behavior, use the extra configuration: extra='ignore', extra='forbid', or extra='allow'. [C7]",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 5/5 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 14 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 4549
+    },
+    {
+      "case_id": "78f2a9ed49915a81",
+      "category": "howto",
+      "output": "I cannot answer because the provided excerpts do not mention how to catch and print validation errors when validating a union of Annotated types with custom tags [C2][C6]. The excerpts do describe validating unions using TypeAdapter and Annotated, and they note that unions can be validated more efficiently by choosing which member to validate against [C2][C6]. The excerpts also explain that unions can be validated with left-to-right, smart, or discriminated modes, and that you can customize error types and messages [C2][C7].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 3/3 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 0.0,
+          "weight": 1.0,
+          "passed": false,
+          "rationale": "refused, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 15 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 5911
+    },
+    {
+      "case_id": "7ce1c5cceb074751",
+      "category": "howto",
+      "output": "I can't answer because the provided excerpts do not include instructions or examples for enabling partial validation with TypeAdapter for models that include lists [C4]. The excerpts do show that TypeAdapter can be used to validate models and that partial validation ignores errors in the last element of the input [C4]. The excerpts also note that partial validation won't work on more nested types because the model validator doesn't support partial validation [C4].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 3/3 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 0.0,
+          "weight": 1.0,
+          "passed": false,
+          "rationale": "refused, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 11 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 8069
+    },
+    {
+      "case_id": "df6c94d08764e7a0",
+      "category": "howto",
+      "output": "I can't provide instructions because the provided excerpts do not include any documentation about ignoring validation errors that occur only in the last element of partial JSON input [C1][C2]. The excerpts do state that Pydantic will ignore all errors in the last element of the input when partial validation is enabled [C1]. The excerpts also state that partial validation ignores errors in the last element of the input and that errors in the last element will be ignored [C1].",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 3/3 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 0.0,
+          "weight": 1.0,
+          "passed": false,
+          "rationale": "refused, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 12 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 6174
+    },
+    {
+      "case_id": "e24a97699dfd33c9",
+      "category": "howto",
+      "output": "You can work around this limitation by using a ContextVar and a custom __init__ method to provide a context when instantiating the model directly [C1][C4]. Here’s how to do it:\n\nUse a ContextVar to store the context and set it on the model instance before calling __init__ (or call __pydantic_validator__.validate_python with the context, as shown in the example code). [C1][C4]",
+      "refused": false,
+      "scores": [
+        {
+          "kind": "citation",
+          "score": 1.0,
+          "weight": 2.0,
+          "passed": true,
+          "rationale": "cited 2/2 factual sentences"
+        },
+        {
+          "kind": "refusal",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "answered, answer required"
+        },
+        {
+          "kind": "judge",
+          "score": 1.0,
+          "weight": 1.0,
+          "passed": true,
+          "rationale": "stub: 12 citation markers in prompt"
+        }
+      ],
+      "error": null,
+      "latency_ms": 4930
+    }
+  ],
+  "metadata": {
+    "judge": "stub"
+  }
+}

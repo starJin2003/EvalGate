@@ -1,0 +1,22 @@
+{
+  "artifact": "evalgate-qwen3-1.7b-v1-iter2000.Q4_K_M.gguf",
+  "sha256": "6633f20c5c1f967cf1ecf0c66d850ae1dc19cad0267160232c0129c6fe8aa531",
+  "size_bytes": 1107408896,
+  "size_mib": 1056.11,
+  "bits_per_weight": 5.12,
+  "quantization": "Q4_K_M",
+  "base_model": "mlx-community/Qwen3-1.7B-8bit",
+  "checkpoint": {
+    "run": "v1",
+    "iter": 2000,
+    "source_file": "training/artifacts/adapters-v1/0002000_adapters.safetensors",
+    "adapter_sha256": "85d7bad1c1d7bd2ca804993d72dac5a0517346525d4dd47aca9bd255dfb6dab7",
+    "rejected_final_iter": 2956,
+    "rejected_final_sha256": "1e23db81d5e23cfd1c61ef34a52246462fd38e86da0b82eea925996915d26e5d",
+    "selection_rule": "lowest full-split valid loss; ties within 0.01 to the earlier checkpoint (DECISIONS 2026-08-02)"
+  },
+  "fused_bf16_sha256": "36ac3fd6b302a4a914e2b0c5b5b670c6279dbad4b35d3bb3982e54563ed46fe8",
+  "built_on": "Apple M1 Pro, mlx-lm 0.31.3, llama.cpp b10210",
+  "target": "OCI Ampere A1, CPU-only inference",
+  "uploaded": false
+}
