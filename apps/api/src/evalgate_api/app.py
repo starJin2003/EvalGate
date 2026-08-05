@@ -8,10 +8,12 @@ reimplemented in CI shell.
 
 from __future__ import annotations
 
+import json
 import os
 import secrets
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException
@@ -255,6 +257,60 @@ def create_app(store: Store | None = None, write_token: str | None = None) -> Fa
         suite, base, cand = _resolve(store, suite_id, baseline.run_id, req.candidate_run_id)
         d = compare(suite, base, cand)
         return {**_diff_payload(d), "comment": markdown_comment(d)}
+
+    # --- the daily verdict ----------------------------------------------------
+    @app.get("/daily/latest")
+    def daily_latest() -> dict[str, Any]:
+        """Serve the daily DAG's `latest.json` verbatim, for the PR gate to age.
+
+        The file is written by the DAG's `publish_latest` task onto the results
+        volume, which this pod mounts readOnly. It is served, not re-derived: the
+        PR gate must age the same bytes the DAG published, and a second copy in
+        Postgres could disagree with the first without anything noticing.
+
+        OPEN, not bearer-guarded, and that is deliberate on both counts.
+        `require_write` guards writes; every read here is already open, and this
+        is a read. The payload is a verdict, a delta, four category means and a
+        timestamp -- no prompts, no answers, no weights. The API is HTTP-only on a
+        bare IP (Let's Encrypt will not issue for 64.181.195.241), so requiring a
+        bearer would push the token across the wire in cleartext on every PR check
+        of every branch, spending a real credential to protect a pass/fail. It
+        would also add a second place to rotate it, and that token is already
+        pending rotation.
+
+        EVERY FAILURE IS A 503 THAT NAMES ITS CAUSE. It must never be an empty
+        pass: `check-daily` blocks on a stale or failing verdict, so a missing
+        file that returned `{}` or a 200 with no `verdict` would convert a dead
+        DAG into a green check -- which is the exact confusion the whole staleness
+        design exists to prevent. 503 rather than 404 because the route exists and
+        the dependency behind it does not, and because `curl -f` fails on both so
+        CI blocks either way.
+        """
+        path = Path(os.environ.get("EVALGATE_DAILY_LATEST", "/out/daily/latest.json"))
+        try:
+            raw = path.read_text()
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                503,
+                f"no daily verdict at {path}: the DAG has not published one, or the "
+                "results volume is not mounted",
+            ) from exc
+        except OSError as exc:
+            raise HTTPException(
+                503, f"cannot read {path}: {type(exc).__name__}: {exc.strerror}"
+            ) from exc
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(503, f"daily verdict at {path} is not valid JSON: {exc}") from exc
+        if not isinstance(payload, dict) or "completed_at" not in payload:
+            # A body without completed_at cannot be aged, and an un-ageable verdict
+            # is indistinguishable from a fresh one to a caller that only reads
+            # `verdict`. Refuse rather than serve something that looks answerable.
+            raise HTTPException(
+                503, f"daily verdict at {path} has no completed_at; it cannot be aged"
+            )
+        return payload
 
     return app
 

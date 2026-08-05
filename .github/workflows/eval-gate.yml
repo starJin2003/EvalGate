@@ -142,10 +142,18 @@ jobs:
             echo "::error::Set it to a URL serving the DAG's /out/daily/latest.json."
             exit 1
           fi
-          # -f so a 404 is a failure rather than an HTML body parsed as JSON.
-          if ! curl -fsS --max-time 30 "${DAILY_URL}" -o artifacts/latest.json; then
-            echo "::error::could not fetch ${DAILY_URL}."
+          # -f so a 503 is a failure rather than an error body parsed as a verdict.
+          # The body is captured anyway and echoed on failure: the API answers a
+          # missing or unreadable verdict with 503 and a `detail` naming the cause
+          # ("the DAG has not published one, or the results volume is not
+          # mounted"), and -f alone would throw that away and leave only a number.
+          CODE=$(curl -sS --max-time 30 -w '%{http_code}' \
+                   "${DAILY_URL}" -o artifacts/latest.json || echo "000")
+          if [ "${CODE}" != "200" ]; then
+            echo "::error::GET ${DAILY_URL} returned ${CODE}."
             echo "::error::An unreachable verdict and a dead DAG are the same thing to a merge decision."
+            echo "--- response body ---"
+            cat artifacts/latest.json || true
             exit 1
           fi
           echo "fetched $(wc -c < artifacts/latest.json) bytes"

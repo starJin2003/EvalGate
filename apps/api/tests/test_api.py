@@ -279,3 +279,69 @@ def test_diff_endpoint_reports_case_level_movement(client, suite) -> None:
 def test_unknown_run_in_diff_is_404(client) -> None:
     r = client.get("/diff?suite_id=s1&baseline_run=ghost&candidate_run=ghost2")
     assert r.status_code == 404
+
+
+# --- /daily/latest ------------------------------------------------------------
+#
+# Every one of these asserts the SAME property from a different angle: the
+# endpoint must never turn a missing or unusable verdict into something a caller
+# reads as passing. `check-daily` blocks on verdict != pass and on age, so a 200
+# with an empty body would convert a dead DAG into a green PR check.
+
+
+def _daily_client(monkeypatch, path) -> TestClient:
+    monkeypatch.setenv("EVALGATE_DAILY_LATEST", str(path))
+    return TestClient(create_app(MemoryStore(), write_token=TOKEN))
+
+
+def test_daily_latest_serves_the_published_verdict(monkeypatch, tmp_path) -> None:
+    p = tmp_path / "latest.json"
+    p.write_text(
+        '{"verdict": "pass", "delta": 0.0, "completed_at": "2026-08-05T05:55:27.403857+00:00"}'
+    )
+    r = _daily_client(monkeypatch, p).get("/daily/latest")
+    assert r.status_code == 200
+    assert r.json()["verdict"] == "pass"
+    assert r.json()["completed_at"] == "2026-08-05T05:55:27.403857+00:00"
+
+
+def test_daily_latest_is_open_and_needs_no_token(monkeypatch, tmp_path) -> None:
+    p = tmp_path / "latest.json"
+    p.write_text('{"verdict": "pass", "completed_at": "2026-08-05T05:55:27+00:00"}')
+    c = _daily_client(monkeypatch, p)
+    # No Authorization header at all, unlike every write path.
+    assert c.get("/daily/latest", headers={}).status_code == 200
+
+
+def test_missing_verdict_is_503_naming_the_path(monkeypatch, tmp_path) -> None:
+    r = _daily_client(monkeypatch, tmp_path / "absent.json").get("/daily/latest")
+    assert r.status_code == 503
+    assert "absent.json" in r.json()["detail"]
+    assert "verdict" not in r.json()
+
+
+def test_unparseable_verdict_is_503_not_a_pass(monkeypatch, tmp_path) -> None:
+    p = tmp_path / "latest.json"
+    p.write_text("{not json")
+    r = _daily_client(monkeypatch, p).get("/daily/latest")
+    assert r.status_code == 503
+    assert "not valid JSON" in r.json()["detail"]
+
+
+def test_verdict_without_completed_at_is_refused(monkeypatch, tmp_path) -> None:
+    # An un-ageable verdict is indistinguishable from a fresh one to a caller
+    # that only reads `verdict`, so serving it would defeat the staleness bound.
+    p = tmp_path / "latest.json"
+    p.write_text('{"verdict": "pass"}')
+    r = _daily_client(monkeypatch, p).get("/daily/latest")
+    assert r.status_code == 503
+    assert "completed_at" in r.json()["detail"]
+
+
+def test_a_failing_verdict_is_served_as_is(monkeypatch, tmp_path) -> None:
+    # The endpoint reports; it does not judge. check-daily decides.
+    p = tmp_path / "latest.json"
+    p.write_text('{"verdict": "fail", "completed_at": "2026-08-05T05:55:27+00:00"}')
+    r = _daily_client(monkeypatch, p).get("/daily/latest")
+    assert r.status_code == 200
+    assert r.json()["verdict"] == "fail"

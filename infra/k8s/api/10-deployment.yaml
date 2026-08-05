@@ -46,6 +46,11 @@ spec:
           env:
             - name: METRICS_PORT
               value: "9000"
+            # Set explicitly rather than left to the code's default, so the path
+            # the API reads and the path the DAG writes are the same string in
+            # two files a reader can diff.
+            - name: EVALGATE_DAILY_LATEST
+              value: /out/daily/latest.json
             # Individually, via secretKeyRef, rather than the envFrom block
             # Postgres uses. This is load-bearing: k8s `$(VAR)` expansion only
             # sees variables defined earlier in this same list, and variables
@@ -124,6 +129,31 @@ spec:
             # reaches for a temp file gets EROFS.
             - name: tmp
               mountPath: /tmp
+            # The daily verdict, so GET /daily/latest can serve the same bytes
+            # the DAG published. readOnly is not decoration: this pod has no
+            # business writing anywhere near a run artifact, and the eval pods
+            # mount the same claim read-write at the same moment.
+            - name: results
+              mountPath: /out
+              readOnly: true
       volumes:
         - name: tmp
           emptyDir: {}
+        # RWO, shared with the eval pods, and that is sound here for one specific
+        # reason: ReadWriteOnce constrains a volume to one NODE, not one pod, and
+        # this cluster has exactly one node, so both API replicas and a running
+        # eval pod mount it simultaneously. The same dependency as the Airflow log
+        # PVC, and it fails the same way: >>> the day a second node joins, any
+        # replica scheduled onto it stays Pending on a Multi-Attach error. <<<
+        # At that point the answer is to serve the verdict from Postgres rather
+        # than from a node-local file.
+        #
+        # It also widens the API's blast radius: an unmountable results volume
+        # stops these pods from starting at all, taking /health and /gate down
+        # with /daily/latest. Accepted because both live on the one node anyway,
+        # so the failure that would trigger it takes the whole API with it
+        # regardless.
+        - name: results
+          persistentVolumeClaim:
+            claimName: evalgate-results
+            readOnly: true

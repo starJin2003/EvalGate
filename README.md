@@ -658,6 +658,25 @@ kubectl -n airflow rollout restart statefulset/airflow-scheduler \
   deployment/airflow-dag-processor deployment/airflow-api-server
 ```
 
+The verdict is served to CI by the API, from the same file the DAG wrote:
+
+```bash
+curl -sS http://64.181.195.241/daily/latest
+# {"verdict":"pass","completed_at":"...","delta":0.0,"categories":{...},"breaches":[]}
+```
+
+Set that URL as the repo variable `EVALGATE_DAILY_URL` and the PR gate's
+freshness job can read it. The endpoint is open — reads on this API are open, the
+payload is a verdict and four category means, and the API is HTTP-only on a bare
+IP, so a bearer token would cross the wire in cleartext on every PR check to
+protect a pass/fail. A missing, unreadable, unparseable or un-ageable verdict is
+a **503 naming the cause**, never a 200 with an empty body: `check-daily` blocks
+on verdict and age, so an empty pass would turn a dead DAG into a green check.
+
+The api pods mount the results claim `readOnly`. That claim is `ReadWriteOnce`,
+which constrains it to one **node**, not one pod — both replicas and a running
+eval pod mount it at once. It stops being sound the day a second node joins.
+
 Three preconditions the DAG does not create for itself:
 
 - **the suite on the node** at `/var/lib/evalgate/eval/suite.json`, which the
