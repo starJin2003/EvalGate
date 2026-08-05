@@ -123,6 +123,27 @@ spec:
             - $(LLAMA_THREADS)
             - --threads-batch
             - $(LLAMA_THREADS)
+            # THE flag that killed the first full-suite attempt. llama-server
+            # keeps a server-side prompt cache of past KV states so a later
+            # request sharing a prefix can skip prefill -- and its default budget
+            # is `--cache-ram 8192`, i.e. 8 GiB, which is TWICE this container's
+            # entire memory limit. Nothing in the default consults the cgroup.
+            #
+            # Measured failure: after 8 completed requests on ~2,500-token
+            # prompts the container hit its 4 GiB limit and the kernel OOM-killed
+            # llama-server (exit 137, anon-rss 3.99 GiB, CONSTRAINT_MEMCG). Each
+            # cached state is roughly n_tokens x 112 KiB, so ~270 MiB per case --
+            # a handful of cases is gigabytes.
+            #
+            # 512 MiB leaves the fixed costs (1,056 MiB weights + 896 MiB KV +
+            # ~300 MiB compute buffers) around 1.2 GiB of headroom, and still
+            # holds the shared system-prompt prefix that every case reuses.
+            #
+            # Safe for the score comparison: a cached KV entry is bit-identical
+            # to a recomputed one, so cache size changes speed and memory, never
+            # output.
+            - --cache-ram
+            - "512"
             # Prometheus metrics for prefill/generation tok/s and prompt sizes,
             # scraped by 60-servicemonitor.yaml onto the existing Grafana stack.
             - --metrics

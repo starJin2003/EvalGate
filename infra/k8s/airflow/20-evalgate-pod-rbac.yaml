@@ -1,0 +1,72 @@
+# Cross-namespace pod launching: Airflow runs in `airflow`, the eval pods run in
+# `evalgate`.
+#
+# THE GAP THIS CLOSES. The chart creates `airflow-pod-launcher-role` and binds it
+# to the scheduler service account — but a Role is namespaced, and the chart's is
+# in `airflow`. The daily DAG's KubernetesPodOperator targets `evalgate`, where
+# that binding does not reach. Without this the first task fails with
+#
+#     pods is forbidden: User "system:serviceaccount:airflow:airflow-scheduler"
+#     cannot create resource "pods" in API group "" in the namespace "evalgate"
+#
+# roughly a second after the run starts, which is a cheap failure to have but an
+# expensive one to discover at 03:00.
+#
+# WHY NOT A ClusterRole. Two namespaces need this, not the cluster. A ClusterRole
+# would let the scheduler create pods in kube-system, which is a strictly larger
+# grant for no gain. Two Roles in two namespaces is the smaller blast radius.
+#
+# WHY THE VERBS ARE WHAT THEY ARE, one to one with what KubernetesPodOperator
+# actually does:
+#   create/get/list/watch  launch the pod and follow it to completion
+#   delete                 on_finish_action="delete_succeeded_pod"
+#   patch                  the operator labels the pod after creation so a
+#                          resumed task can re-adopt it instead of launching a
+#                          second copy of a 3-hour run
+#   pods/log get           get_logs=True — the task log IS the eval's stdout
+#   events list/watch      the operator reads pod events to explain a failure to
+#                          start (ImagePullBackOff, unschedulable) rather than
+#                          just timing out at startup_timeout_seconds
+#
+# NOT granted: pods/exec (nothing execs), and anything outside core/v1. The pod's
+# own identity is the `default` service account in evalgate, which grants nothing
+# — the eval container talks to the model server over HTTP and touches no API.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: airflow-pod-launcher
+  namespace: evalgate
+  labels:
+    app.kubernetes.io/name: airflow
+    app.kubernetes.io/part-of: evalgate
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["create", "get", "list", "watch", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: airflow-pod-launcher
+  namespace: evalgate
+  labels:
+    app.kubernetes.io/name: airflow
+    app.kubernetes.io/part-of: evalgate
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: airflow-pod-launcher
+subjects:
+  # The scheduler, and only the scheduler. Under LocalExecutor the task runs as a
+  # subprocess inside the scheduler pod, so the scheduler's token is what the
+  # operator authenticates with. The dag-processor only parses the file and the
+  # api-server only renders it; neither creates anything.
+  - kind: ServiceAccount
+    name: airflow-scheduler
+    namespace: airflow

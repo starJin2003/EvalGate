@@ -61,6 +61,10 @@ training/artifacts/restore_check/
 # learning-rate decision rests on, and it is a few KB.
 training/artifacts/adapters-*/
 training/artifacts/*_console.log
+# Per-case progress logs. Pure duplicates of the `results` array in the run
+# artifact beside them -- they exist so a killed pod leaves evidence mid-run, not
+# as a record worth keeping once the run finished. ~200 KB of exact duplication.
+training/artifacts/p14/*.progress.jsonl
 # Staged copy of the selected checkpoint. Byte-identical to a file under
 # adapters-v1/ by construction -- stage_selected_adapter.sh asserts it -- so
 # committing it would duplicate 19 MB of weights that are already ignored.

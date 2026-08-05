@@ -47,6 +47,20 @@ class Breach:
     drop: float
     limit: float
     reason: str
+    # "threshold" for a score drop, "zero_tolerance" for a case-count rule. The
+    # two read very differently in a PR comment and conflating them is what let a
+    # sub-quantum limit pass as a tolerance.
+    kind: str = "threshold"
+    regressed_cases: list[str] = field(default_factory=list)
+
+
+class BackendMismatch(RuntimeError):
+    """Raised when a diff is asked to compare runs from different backends.
+
+    Loud and specific on purpose. A generic error here gets diagnosed as a broken
+    gate; this one names both sides so the reader immediately sees the real
+    problem is the comparison, not the harness.
+    """
 
 
 @dataclass
@@ -111,7 +125,31 @@ def _check(scope: str, baseline: float, candidate: float, t: Threshold) -> Breac
     return None
 
 
+def _assert_comparable(baseline: RunResult, candidate: RunResult) -> None:
+    """Refuse a cross-backend or cross-build diff, naming both sides.
+
+    Only fires when BOTH runs declare the field. A run recorded before provenance
+    existed compares as before -- blocking those would make historical artifacts
+    unreadable without making any comparison more correct.
+    """
+    for field_name, label in (("backend", "backend"), ("build_info", "llama.cpp build")):
+        a, b = getattr(baseline, field_name), getattr(candidate, field_name)
+        if a is not None and b is not None and a != b:
+            raise BackendMismatch(
+                f"refusing to compare runs from different {label}s:\n"
+                f"  baseline  {baseline.run_id!r}\n"
+                f"      {label}={a!r}  model_ref={baseline.model_ref!r}\n"
+                f"  candidate {candidate.run_id!r}\n"
+                f"      {label}={b!r}  model_ref={candidate.model_ref!r}\n"
+                f"Measured 2026-08-04: identical weights across Metal and ggml CPU "
+                f"move the suite 0.004272 and change 79 of 96 answers, which is the "
+                f"same size as a real category regression. This is not a harness "
+                f"fault — re-run one side on the other's {label}."
+            )
+
+
 def compare(suite: Suite, baseline: RunResult, candidate: RunResult) -> Diff:
+    _assert_comparable(baseline, candidate)
     base_cases, cand_cases = baseline.by_case(), candidate.by_case()
     categories = {c.case_id: str(c.category) for c in suite.cases}
 
@@ -142,7 +180,35 @@ def compare(suite: Suite, baseline: RunResult, candidate: RunResult) -> Diff:
     overall = _check("overall", diff.baseline_score, diff.candidate_score, suite.threshold)
     if overall:
         diff.breaches.append(overall)
+    zero_tol = {
+        c.value if hasattr(c, "value") else str(c): r for c, r in suite.zero_tolerance.items()
+    }
     for category, scores in diff.by_category().items():
+        if category in zero_tol:
+            rule = zero_tol[category]
+            regressed = sorted(
+                c.case_id
+                for c in diff.cases
+                if c.category == category and c.candidate_score < c.baseline_score - 1e-9
+            )
+            if len(regressed) > rule.max_regressed_cases:
+                diff.breaches.append(
+                    Breach(
+                        scope=category,
+                        baseline=scores["baseline"],
+                        candidate=scores["candidate"],
+                        drop=scores["baseline"] - scores["candidate"],
+                        limit=float(rule.max_regressed_cases),
+                        kind="zero_tolerance",
+                        regressed_cases=regressed,
+                        reason=(
+                            f"{len(regressed)} regressed case(s), "
+                            f"limit {rule.max_regressed_cases} — "
+                            f"{', '.join(regressed)}"
+                        ),
+                    )
+                )
+            continue
         t = suite.threshold_for(category)  # type: ignore[arg-type]
         breach = _check(category, scores["baseline"], scores["candidate"], t)
         if breach:

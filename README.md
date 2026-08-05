@@ -463,6 +463,54 @@ Dropping bf16 → 8-bit saves ~1.6 GB; gradient checkpointing saves ~16 GB. Use
 trains the model to emit unterminated answers rather than to answer from unseen
 chunks. At 4096 that would hit 220 of 1,758 rows (12.5%).
 
+### Choosing a checkpoint
+
+mlx-lm never picks one. The rule was written down **before either run started**
+(DECISIONS 2026-08-02) and both versions are selected by it, unchanged:
+
+> Candidates are every numbered checkpoint plus the final weights. Score each on
+> the full 140-row valid split. Lowest full-split valid loss; if two are within
+> 0.01, take the earlier one.
+
+```bash
+uv run evalgate-training train eval-adapters \
+  --adapter-path training/artifacts/adapters-v2 \
+  --data         training/artifacts/dataset-v2 \
+  --progress-log training/artifacts/v2_eval_adapters.jsonl \
+  --json-out     training/artifacts/v2_eval_adapters.json
+
+uv run evalgate-training train select \
+  --eval-json training/artifacts/v2_eval_adapters.json
+```
+
+**Pass `--adapter-path` explicitly, always.** Its default is the *probe*
+directory, and a sweep that silently scores throwaway weights produces a
+perfectly plausible table. That was one of two defects this command shipped with;
+the other was a glob that matched `0002000_adapters.safetensors` but not the bare
+`adapters.safetensors`, quietly dropping the final weights — an arm the rule names
+explicitly and the one most likely to be assumed the default. Both are fixed, and
+the result file now records the adapter directory, the data directory and the full
+candidate list so none of it has to be inferred later.
+
+**The in-training val number is not an input.** `evaluate` gets no seed, so each
+in-training eval scores a different reshuffled ~18% subsample; the untrained model
+alone moves 0.2053 between a subsample and the full split. Only
+`eval-adapters` (`num_batches=-1`, whole split, one pass) is comparable.
+
+**The selection is applied by `train select`, not by eye.** v1's winner cleared
+the 0.01 band by 0.000230 — the margin at which hand arithmetic goes wrong, and at
+which someone who wants a particular answer can find one. A test asserts the
+implementation reproduces v1's published selection (iter 2000) from v1's committed
+sweep, so it is validated against a decision that predates the code. The function
+takes one run's losses and nothing else, which is what makes "choose the
+checkpoint that maximises the v1→v2 gap" — explicitly barred — inexpressible
+rather than merely discouraged.
+
+Then stage the selected weights before fusing, which is its own trap:
+`mlx_lm.fuse --adapter-path` takes a *directory* and hardcodes
+`adapters.safetensors`, i.e. the **final** weights, not the selected checkpoint.
+`training/scripts/stage_selected_adapter.sh` is the guard.
+
 ## P1.3 — serving
 
 GGUF plus llama.cpp, because MLX cannot run on OCI Ampere: this is the production
@@ -474,9 +522,16 @@ brew install llama.cpp                     # arm64 bottle; every binary is Mach-
 uv run --group mlx python -c "from huggingface_hub import snapshot_download; \
   snapshot_download('mlx-community/Qwen3-1.7B-8bit')"   # once, with network — fuse needs
                                                         # a *complete* snapshot
+# Stage the SELECTED checkpoint first, then fuse from the staging directory.
+# NEVER point --adapter-path at adapters-v1/ or adapters-v2/: it takes a
+# *directory* and hardcodes adapters.safetensors, which is the FINAL weights,
+# not the checkpoint the rule selected. It would succeed and print nothing
+# unusual. This README previously documented that exact wrong path.
+./training/scripts/stage_selected_adapter.sh 2000 v1     # v2: 1200 v2
+
 uv run --group mlx python -m mlx_lm fuse \
   --model mlx-community/Qwen3-1.7B-8bit \
-  --adapter-path training/artifacts/adapters-v1 \
+  --adapter-path training/artifacts/adapters-v1-selected \
   --save-path training/.scratch/fused-v1-bf16 --dequantize
 
 cd training/.scratch/llamacpp/llama.cpp-b10210
@@ -532,8 +587,26 @@ uv run evalgate-eval gate --suite artifacts/suite.json \
 **Category thresholds are the point.** The v1→v2 training experiment is designed
 to raise the overall average while the refusal category collapses. A gate that
 watched only the average would green-light it. Every category is checked against a
-threshold; `category_thresholds` tightens specific ones, and adversarial carries
-both a tighter drop limit and a score floor.
+threshold, and `category_thresholds` tightens specific ones.
+
+**A threshold below the measurement quantum is not a threshold.** With 24 cases
+per category, one case is 1/24 = 0.0417 of that category's score, so nothing
+smaller than that can ever be observed. Adversarial used to carry
+`max_drop: 0.01`, which reads like "tolerate a small drop" and can only mean
+"tolerate nothing" — a promise written in a form that hides what it is. It is now
+a `ZeroTolerance` rule counting regressed **cases** (`max_regressed_cases: 0`),
+which says the same thing out loud and stays honest if the suite is ever resized.
+`Suite` validation *rejects* any per-category `max_drop` under the quantum rather
+than warning. comparison, factual and howto sit at **0.0833** — two cases — and
+before this they had no thresholds at all, so the gate could not fail on them.
+
+**Runs carry their provenance and the gate refuses to diff across it.** A run
+records `backend` (declared with `--backend`, since nothing the server exposes
+names it reliably), `quantization`, and `build_info` observed from llama-server.
+`compare()` raises rather than diffing two runs whose backend or llama.cpp build
+differ, naming both sides: identical weights across Metal and ggml CPU moved this
+suite **0.004272** and changed 79 of 96 answers, which is the size of a real
+category regression. Runs recorded before provenance existed compare as before.
 
 Other decisions worth knowing: thresholds are **absolute** drops, not relative, so
 a PR comment is defensible to someone who didn't write it. Baseline promotion is
@@ -547,6 +620,68 @@ The judge is provider-abstracted with a SQLite cache keyed on case + output +
 rubric + **judge version**, so changing the judge invalidates old verdicts instead
 of silently mixing them. `eval-gate.yml` restores that cache across PRs, which is
 what keeps the gate affordable on a zero-dollar budget.
+
+### Two instruments: the daily run and the PR gate
+
+They answer different questions and have separate configs on purpose
+(`packages/evalcore/src/evalcore/gate_config.py`).
+
+| | asks | costs |
+|---|---|---|
+| **daily run** | did model quality change? | 96 cases, ~2.9 h on the node |
+| **PR gate** | did this diff break the instrument, and is the last measurement still good? | no inference by default, seconds |
+
+A PR cannot change model weights, so re-running 96 cases per PR would spend 2.9 h
+measuring something the PR almost never affects. Shrinking the suite to fit a
+five-minute gate does not trade accuracy for speed, it destroys the resolution the
+thresholds are written in — at 12 cases one case is a third of a category. So the
+PR gate carries **no score thresholds at all**; it asserts the last daily verdict
+passed and is recent (`evalgate-eval check-daily`). The narrow exception is a PR
+touching `prompt.py`, `scorers.py` or `loader.py`, which moves every score and
+escalates to a full run.
+
+Schedule, deadline and staleness are **one** decision, not three:
+`floor(staleness) = 24 h interval + 3.8 h worst-case duration = 27.8 h`. The bound
+is 36 h, so one missed night does not block merges and two consecutive ones do.
+
+### Deploying the daily DAG
+
+DAGs are baked into the Airflow image, so a DAG edit is a build plus a rollout —
+`helm upgrade` alone will not restart pods, because the tag never changes.
+
+```bash
+./infra/k8s/airflow/build-on-node.sh                    # ~20 s, native arm64
+KUBECONFIG=~/.kube/evalgate.yaml \
+  EVALGATE_NODE_SSH="ssh -i ~/.ssh/evalgate_ed25519 ubuntu@<node>" \
+  ./infra/k8s/airflow/apply.sh
+kubectl -n airflow rollout restart statefulset/airflow-scheduler \
+  deployment/airflow-dag-processor deployment/airflow-api-server
+```
+
+Three preconditions the DAG does not create for itself:
+
+- **the suite on the node** at `/var/lib/evalgate/eval/suite.json`, which the
+  eval pod mounts readOnly from the same PVC as the hash-gated weights;
+- **a baseline** at `/var/lib/evalgate/results/baseline/run_baseline.json`.
+  Without one the gate prints "no baseline artifact; passing" and writes no
+  verdict, so `publish-latest` records `unknown`. Promotion is deliberate — see
+  the explicit-promotion argument above;
+- **`20-evalgate-pod-rbac.yaml`**, applied by `apply.sh`. The chart's
+  pod-launcher Role lives in the `airflow` namespace and the eval pods run in
+  `evalgate`; a namespaced Role does not reach across.
+
+Triggering it by hand, which is also how the pipeline is proved end to end:
+
+```bash
+kubectl -n airflow exec airflow-scheduler-0 -c scheduler -- \
+  airflow dags trigger evalgate_daily_eval --run-id manual__proof \
+    --logical-date "$(date -u -v-1M +%FT%T+00:00)"     # GNU date: -d '-1 min'
+```
+
+**Pass a logical date, and put it in the past.** A logical date in the future is
+not scheduled until it arrives and then the run is closed out empty; a logical
+date before the DAG's `start_date` creates no task instances at all. Both produce
+a DAG run marked `success` that ran nothing.
 
 ## P2 — infrastructure, and the capacity lottery
 

@@ -98,10 +98,40 @@ class Threshold(BaseModel):
 
     Absolute, not relative: a 5% relative drop means something different at 0.9
     than at 0.4, and the gate comment has to be explainable in a PR review.
+
+    A threshold is only meaningful ABOVE the measurement quantum. This suite has
+    24 cases per category, so the smallest possible category move is 1/24 =
+    0.0417: any `max_drop` below that is not a tolerance at all, it is "one case
+    blocks", written in a form that hides the fact. `ZeroTolerance` exists so that
+    intent can be stated instead of encoded as a small float -- see its docstring.
     """
 
     max_drop: float = 0.02
     min_score: float | None = None
+    model_config = {"extra": "forbid"}
+
+
+class ZeroTolerance(BaseModel):
+    """Any regressed case in this category blocks. A COUNT, not a score.
+
+    Why this is not `Threshold(max_drop=0.01)`, which is what it replaced:
+    adversarial has 24 cases, so one case is 0.0417. A 0.01 limit is 4.2x FINER
+    than the smallest move the metric can make -- so it could never mean "tolerate
+    a small drop", it could only ever mean "tolerate nothing". It was read as the
+    former for weeks, including by the person who set it, and the v1->v2 result
+    turned on exactly that: one adversarial case breaching a limit that looked
+    like a 1% allowance.
+
+    Stated as a case count, the rule is unambiguous and cannot silently become
+    sub-quantum if the suite size changes: 24 cases or 240, `max_regressed_cases:
+    0` means the same thing.
+
+    Used for the refusal category because refusal discipline is the safety
+    property here -- a model that answers about an API it was told does not exist
+    is wrong in a way no aggregate should be allowed to average away.
+    """
+
+    max_regressed_cases: int = 0
     model_config = {"extra": "forbid"}
 
 
@@ -115,6 +145,10 @@ class Suite(BaseModel):
     # project exists to catch, so per-category thresholds are first class.
     threshold: Threshold = Field(default_factory=Threshold)
     category_thresholds: dict[Category, Threshold] = Field(default_factory=dict)
+    # Categories governed by a case-count rule instead of a score threshold. A
+    # category must not appear in both; the validator below enforces that, because
+    # two rules over one category is exactly how an intent gets lost.
+    zero_tolerance: dict[Category, ZeroTolerance] = Field(default_factory=dict)
     model_config = {"extra": "forbid"}
 
     @model_validator(mode="after")
@@ -123,6 +157,26 @@ class Suite(BaseModel):
         dupes = {i for i in ids if ids.count(i) > 1}
         if dupes:
             raise ValueError(f"duplicate case ids in {self.suite_id}: {sorted(dupes)}")
+        both = set(self.category_thresholds) & set(self.zero_tolerance)
+        if both:
+            raise ValueError(
+                f"{sorted(c.value for c in both)} have BOTH a score threshold and a "
+                "zero-tolerance rule. Pick one: a category governed by two rules is how "
+                "the intent behind either stops being readable."
+            )
+        # A per-category threshold below the quantum is the defect ZeroTolerance
+        # exists to prevent, so it is rejected rather than silently honoured.
+        per_cat = {}
+        for case in self.cases:
+            per_cat[case.category] = per_cat.get(case.category, 0) + 1
+        for category, t in self.category_thresholds.items():
+            n = per_cat.get(category, 0)
+            if n and 0 < t.max_drop < 1 / n:
+                raise ValueError(
+                    f"{category.value}: max_drop {t.max_drop} is below the quantum "
+                    f"1/{n} = {1 / n:.4f}, so it cannot mean 'tolerate a small drop' — "
+                    "it can only mean 'tolerate nothing'. Use ZeroTolerance and say so."
+                )
         return self
 
     def threshold_for(self, category: Category | None) -> Threshold:
@@ -174,6 +228,22 @@ class RunResult(BaseModel):
     suite_id: str
     suite_version: str
     model_ref: str
+    # --- provenance -----------------------------------------------------------
+    # Measured 2026-08-04: identical weights scored on Metal and on ggml CPU give
+    # a 0.004272 suite delta and 79 of 96 different answers, because greedy
+    # decoding forks on near-tied logits. That is the same order as several real
+    # v1->v2 category deltas, so a diff assembled across backends is not a
+    # measurement of the models. `compare()` refuses it.
+    #
+    # `backend` is DECLARED by the caller, because nothing the server exposes
+    # names it reliably. `build_info` is OBSERVED from llama-server's /props, so a
+    # llama.cpp version change is caught even if someone declares the backend
+    # wrongly. Both default to None so runs recorded before this existed still
+    # load; comparisons involving them are allowed and warned about, not blocked,
+    # since refusing to read historical artifacts helps nobody.
+    backend: str | None = None
+    quantization: str | None = None
+    build_info: str | None = None
     results: list[CaseResult]
     metadata: dict[str, Any] = Field(default_factory=dict)
     model_config = {"extra": "forbid"}

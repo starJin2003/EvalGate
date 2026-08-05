@@ -1,0 +1,35 @@
+{
+  "adapter_path": "training/artifacts/adapters-v2",
+  "data": "training/artifacts/dataset-v2",
+  "gap_to_raw_minimum": 0.0,
+  "losses": {
+    "1000": 0.9920989871025085,
+    "1200": 0.9788694381713867,
+    "1400": 1.003959059715271,
+    "1600": 1.008139967918396,
+    "1800": 1.0053071975708008,
+    "200": 1.0885964632034302,
+    "2000": 0.9956015348434448,
+    "2200": 0.9953327775001526,
+    "2400": 1.0161433219909668,
+    "400": 1.0539590120315552,
+    "600": 1.0219837427139282,
+    "800": 1.001787543296814,
+    "baseline": 5.4749016761779785,
+    "final": 1.0101920366287231
+  },
+  "n_candidates": 13,
+  "qualifies_by": 0.01,
+  "raw_minimum": "1200",
+  "raw_minimum_loss": 0.9788694381713867,
+  "rows": 140,
+  "rule": "lowest full-split valid loss; if two are within 0.01, take the earlier one (DECISIONS 2026-08-02)",
+  "selected": "1200",
+  "selected_loss": 0.9788694381713867,
+  "sweep": "training/artifacts/v2_eval_adapters.json",
+  "tie_break_applied": false,
+  "tolerance": 0.01,
+  "within_tolerance": [
+    "1200"
+  ]
+}

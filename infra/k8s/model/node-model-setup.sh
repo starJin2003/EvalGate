@@ -34,6 +34,14 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 MODELS_DIR=/var/lib/evalgate/models
 EVAL_DIR=/var/lib/evalgate/eval
+# Results live apart from weights and inputs. Owned by the container's uid, not
+# by ubuntu: this backs a `local` PV, and `fsGroup` does not relabel local
+# volumes, so a pod running as 10001 cannot fix the ownership for itself. The
+# first full-suite attempt died on exactly this, at the final write, after the
+# inference was already done.
+RESULTS_DIR=/var/lib/evalgate/results
+# Must match runAsUser/runAsGroup in 40-deployment.yaml and 70-eval-job.yaml.
+CONTAINER_UID=10001
 FORBIDDEN_MOUNT=/mnt/pgdata
 
 log() { printf '[model-setup] %s\n' "$*"; }
@@ -73,14 +81,19 @@ $NODE_SSH "set -euo pipefail
     exit 1
   fi
 
-  sudo mkdir -p ${MODELS_DIR} ${EVAL_DIR}
+  sudo mkdir -p ${MODELS_DIR} ${EVAL_DIR} ${RESULTS_DIR}
   # Owned by ubuntu so the upload does not need sudo on every rsync, and the
-  # kubelet reads it through a readOnly mount regardless of owner.
+  # kubelet reads these through readOnly mounts regardless of owner.
   sudo chown ubuntu:ubuntu ${MODELS_DIR} ${EVAL_DIR}
   sudo chmod 755 ${MODELS_DIR} ${EVAL_DIR}
+  # Results are the one directory a container must WRITE, so it is owned by the
+  # container's uid rather than by ubuntu.
+  sudo chown ${CONTAINER_UID}:${CONTAINER_UID} ${RESULTS_DIR}
+  sudo chmod 775 ${RESULTS_DIR}
 
   echo \"models  -> ${MODELS_DIR} on \$target_src\"
   echo \"eval    -> ${EVAL_DIR} on \$target_src\"
+  echo \"results -> ${RESULTS_DIR} on \$target_src (uid ${CONTAINER_UID}, writable)\"
   echo \"pgdata  -> \${pgdata_src:-<not mounted>} (must differ from the above)\"
   df -h /var/lib/evalgate | tail -1
 "

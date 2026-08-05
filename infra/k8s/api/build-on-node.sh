@@ -55,7 +55,12 @@ CONTEXT_PATHS=(
 log "Streaming build context to the node."
 # shellcheck disable=SC2086
 $NODE_SSH "rm -rf ${REMOTE_DIR} && mkdir -p ${REMOTE_DIR}"
-tar --exclude='__pycache__' --exclude='*.pyc' -czf - "${CONTEXT_PATHS[@]}" \
+# COPYFILE_DISABLE=1 plus the ._* exclusion: macOS bsdtar emits an AppleDouble
+# `._<file>` member for every file with extended attributes. Harmless here, but
+# the same tar line in the airflow build shipped a `._*.py` into the DAG folder
+# and gave the dag-processor a permanent import error. Same fix, both places.
+COPYFILE_DISABLE=1 tar --exclude='__pycache__' --exclude='*.pyc' --exclude='._*' \
+  -czf - "${CONTEXT_PATHS[@]}" \
   | $NODE_SSH "tar -xzf - -C ${REMOTE_DIR}"
 
 log "Building ${TAG} on the node (foreground)."

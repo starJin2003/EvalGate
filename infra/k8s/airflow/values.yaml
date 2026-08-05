@@ -185,12 +185,30 @@ scheduler:
       memory: 1536Mi
   logGroomerSidecar:
     enabled: true
-    # Chart default is 15 days. Kept, and given a hard size bound as well —
-    # local-path enforces no quota, so the 2Gi PVC above is advisory on its own.
-    # maxSizeBytes is what actually stops log growth filling the boot volume.
+    # Chart default is 15 days. Kept.
+    #
+    # >>> maxSizeBytes IS REMOVED, AND MUST NOT COME BACK ON A local-path PVC. <<<
+    #
+    # It was set to 1.5 GB here as a hard bound, on the reasoning that local-path
+    # enforces no quota so the 2Gi claim is advisory. It destroyed the logs. The
+    # chart's `/clean-logs` measures the current size with
+    #
+    #     df -k "${AIRFLOW_HOME}"/logs | tail -1 | awk '{print $3}'
+    #
+    # which is the used space of the whole FILESYSTEM, not of the log directory.
+    # A local-path volume is a directory on the boot volume, so this read
+    # **16.55 GB** against a 1.5 GB budget while the logs themselves weighed
+    # **26 KB** — over by a factor of 632,000. Being over budget makes the script
+    # decrement `retention_days` and `continue`, with no sleep, so retention walks
+    # 15 → 0 within one pass and `find -mmin +0` then deletes every `.log` older
+    # than a minute. Measured 2026-08-04: the 2.9-hour eval's own task logs were
+    # gone ~7 minutes after it finished.
+    #
+    # The real bound is arithmetic, not a knob: one DAG run per day at ~26 KB of
+    # task logs is ~400 KB over the 15-day retention, against a 2Gi claim on a
+    # volume with 32 GB free. There is nothing here for a size cap to protect.
     retentionDays: 15
     frequencyMinutes: 15
-    maxSizeBytes: 1500000000  # 1.5 GB of the 2Gi claim
     resources:
       requests:
         cpu: 10m

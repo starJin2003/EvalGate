@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Stage the SELECTED checkpoint so mlx_lm.fuse cannot pick up the wrong weights.
 #
-#   ./training/scripts/stage_selected_adapter.sh [iter]
+#   ./training/scripts/stage_selected_adapter.sh [iter] [version]
+#
+#     v1:  ./training/scripts/stage_selected_adapter.sh 2000 v1
+#     v2:  ./training/scripts/stage_selected_adapter.sh 1200 v2
 #
 # WHY THIS EXISTS
 #
@@ -46,9 +49,14 @@
 set -euo pipefail
 
 ITER="${1:-2000}"
+# Parameterised for v2. The version is explicit and has no default that could
+# quietly stage the wrong run's weights -- the same class of defect as
+# eval-adapters defaulting to the probe directory.
+VERSION="${2:-v1}"
+case "$VERSION" in v1|v2) ;; *) echo "unknown version: $VERSION (want v1 or v2)" >&2; exit 1;; esac
 ART=training/artifacts
-SRC_DIR="${ART}/adapters-v1"
-STAGE="${ART}/adapters-v1-selected"
+SRC_DIR="${ART}/adapters-${VERSION}"
+STAGE="${ART}/adapters-${VERSION}-selected"
 SELECTED="$(printf '%s/%07d_adapters.safetensors' "$SRC_DIR" "$ITER")"
 FINAL="${SRC_DIR}/adapters.safetensors"
 
@@ -65,7 +73,7 @@ FIN_SHA="$(sha "$FINAL")"
 
 log "selected  iter ${ITER}  $SELECTED"
 log "  sha256  ${SEL_SHA}"
-log "final     iter 2956     $FINAL"
+log "final     (last iter)  $FINAL"
 log "  sha256  ${FIN_SHA}"
 
 [ "$SEL_SHA" != "$FIN_SHA" ] || die \
@@ -88,12 +96,13 @@ log "GUARD A ok: staged == selected checkpoint"
 
 # GUARD B — the one that catches the real mistake
 [ "$STAGED_SHA" != "$FIN_SHA" ] || die \
-  "staged file IS the final adapters.safetensors (iter 2956), not iter ${ITER}.
+  "staged file IS the final adapters.safetensors, not iter ${ITER}.
        This is the exact silent-wrong-weights failure this guard exists for."
 log "GUARD B ok: staged != final weights"
 
 cat > "${STAGE}/SELECTED.json" <<EOF
 {
+  "version": "${VERSION}",
   "selected_iter": ${ITER},
   "selected_file": "$(basename "$SELECTED")",
   "selected_sha256": "${SEL_SHA}",

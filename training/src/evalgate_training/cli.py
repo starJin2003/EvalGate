@@ -44,6 +44,7 @@ from .golden import select as golden_select
 from .questions import generate, verify
 from .teacher import batch as teacher_batch
 from .train import probe as train_probe
+from .train import select as train_select
 
 
 def _print(obj: object) -> None:
@@ -394,11 +395,32 @@ def cmd_train_trajectory(args: argparse.Namespace) -> None:
 
 def cmd_train_eval_adapters(args: argparse.Namespace) -> None:
     result = train_probe.eval_adapters(
-        adapter_path=args.adapter_path, progress_log=args.progress_log
+        adapter_path=args.adapter_path, progress_log=args.progress_log, data=args.data
     )
     print(train_probe.format_eval(result))
     if args.json_out:
         Path(args.json_out).write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+        print(f"\nwrote {args.json_out}")
+
+
+def cmd_train_select(args: argparse.Namespace) -> None:
+    result = json.loads(Path(args.eval_json).read_text())
+    losses = result["losses"]
+    selection = train_select.select_checkpoint(losses)
+    print(f"sweep     {args.eval_json}")
+    print(f"adapters  {result.get('adapter_path')}")
+    print(f"valid     {result.get('data')}  ({result.get('rows')} rows)\n")
+    print(train_select.format_selection(selection, losses))
+    if args.json_out:
+        payload = {
+            **selection,
+            "sweep": args.eval_json,
+            "adapter_path": result.get("adapter_path"),
+            "data": result.get("data"),
+            "rows": result.get("rows"),
+            "losses": losses,
+        }
+        Path(args.json_out).write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
         print(f"\nwrote {args.json_out}")
 
 
@@ -564,6 +586,15 @@ def build_parser() -> argparse.ArgumentParser:
             "directory explicitly when selecting a checkpoint."
         ),
     )
+    ea.add_argument(
+        "--data",
+        default=None,
+        help=(
+            "dataset directory whose valid.jsonl is scored. Defaults to TRAIN_PROBE's "
+            "(v1's). v1 and v2 valid splits are byte-identical by construction, so this "
+            "changes what the artifact RECORDS, not the number"
+        ),
+    )
     ea.add_argument("--json-out", default=None, help="also write the raw losses to this path")
     ea.add_argument(
         "--progress-log",
@@ -571,6 +602,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="append each arm's loss as it completes, so a crash mid-sweep loses one arm not all",
     )
     ea.set_defaults(func=cmd_train_eval_adapters)
+
+    sel = t.add_parser(
+        "select",
+        help="apply the pre-committed selection rule to an eval-adapters result",
+    )
+    sel.add_argument("--eval-json", required=True, help="an eval-adapters --json-out file")
+    sel.add_argument("--json-out", default=None, help="write the selection here")
+    sel.set_defaults(func=cmd_train_select)
 
     sub.add_parser("budget", help="show cumulative spend").set_defaults(func=cmd_budget)
     return p

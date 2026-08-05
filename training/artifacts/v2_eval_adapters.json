@@ -1,0 +1,38 @@
+{
+  "adapter_path": "training/artifacts/adapters-v2",
+  "candidates": [
+    "baseline",
+    "0000200_adapters.safetensors",
+    "0000400_adapters.safetensors",
+    "0000600_adapters.safetensors",
+    "0000800_adapters.safetensors",
+    "0001000_adapters.safetensors",
+    "0001200_adapters.safetensors",
+    "0001400_adapters.safetensors",
+    "0001600_adapters.safetensors",
+    "0001800_adapters.safetensors",
+    "0002000_adapters.safetensors",
+    "0002200_adapters.safetensors",
+    "0002400_adapters.safetensors",
+    "adapters.safetensors"
+  ],
+  "data": "training/artifacts/dataset-v2",
+  "losses": {
+    "1000": 0.9920989871025085,
+    "1200": 0.9788694381713867,
+    "1400": 1.003959059715271,
+    "1600": 1.008139967918396,
+    "1800": 1.0053071975708008,
+    "200": 1.0885964632034302,
+    "2000": 0.9956015348434448,
+    "2200": 0.9953327775001526,
+    "2400": 1.0161433219909668,
+    "400": 1.0539590120315552,
+    "600": 1.0219837427139282,
+    "800": 1.001787543296814,
+    "baseline": 5.4749016761779785,
+    "final": 1.0101920366287231
+  },
+  "rows": 140,
+  "wall_clock_s": 10170.0
+}

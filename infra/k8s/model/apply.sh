@@ -79,9 +79,12 @@ kubectl -n "$NS" create configmap evalgate-model-manifest \
   --from-literal=GGUF_SIZE_BYTES="$EXPECTED_SIZE" \
   --dry-run=client -o yaml | kubectl apply -f -
 
-log "Applying StorageClass, PV, PVC, Deployment, and Service."
+log "Applying StorageClass, PVs, PVCs, Deployment, and Service."
 kubectl apply -f "${HERE}/10-storageclass.yaml"
 kubectl apply -f "${HERE}/20-pv.yaml"
+# Results volume, deliberately separate from the weights volume. See the header
+# of 25-results-pv.yaml for why sharing one mount cost a completed run.
+kubectl apply -f "${HERE}/25-results-pv.yaml"
 kubectl apply -f "${HERE}/30-pvc.yaml"
 kubectl apply -f "${HERE}/40-deployment.yaml"
 kubectl apply -f "${HERE}/50-service.yaml"

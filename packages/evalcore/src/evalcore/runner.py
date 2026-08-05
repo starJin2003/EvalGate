@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import Callable
 from typing import Protocol, runtime_checkable
 
 from .judge import JudgeClient
 from .schema import Case, CaseResult, RunResult, ScorerKind, Suite
-from .scorers import is_rule_based, score_rule_based
+from .scorers import is_refusal, is_rule_based, score_rule_based
 
 
 @runtime_checkable
@@ -85,8 +86,19 @@ def run_case(
         case_id=case.case_id,
         category=case.category,
         output=output,
-        refused=any(s.kind is ScorerKind.refusal and s.passed for s in scores)
-        and case.category == "adversarial",
+        # What the model DID, not whether doing it was correct.
+        #
+        # This was `any(refusal scorer passed) and category == "adversarial"`,
+        # which hard-forced False outside adversarial — so counting refusals by
+        # category could only ever return 0 there, and a recorded conclusion
+        # ("0 of 24 comparison") was an artefact rather than a measurement.
+        #
+        # Note that simply DROPPING the category conjunct does not fix it, it
+        # inverts it: `passed` for a non-adversarial case means the model
+        # correctly *answered*, so `refused` would read True on exactly the cases
+        # that did not refuse. The flag has to come from the text, which is what
+        # `score_refusal` itself does — hence one shared `is_refusal`.
+        refused=is_refusal(output),
         scores=scores,
         error=error,
         latency_ms=int((time.perf_counter() - started) * 1000),
@@ -98,8 +110,24 @@ def run_suite(
     model: ModelClient,
     judge: JudgeClient | None = None,
     run_id: str | None = None,
+    on_result: Callable[[CaseResult], None] | None = None,
 ) -> RunResult:
-    results = [run_case(case, model, judge) for case in suite.cases]
+    """Score every case.
+
+    `on_result` fires after each case, before the next one starts. It exists so a
+    caller can persist progress incrementally: on CPU-only hardware a suite is
+    hours long, and the whole run previously reached disk in a single write at the
+    very end -- so a crash at case 90, or a model server that dies mid-suite,
+    discarded every completed case. A callback that raises will abort the run,
+    which is deliberate: a progress sink that has started failing is worth
+    knowing about immediately rather than at the end.
+    """
+    results = []
+    for case in suite.cases:
+        result = run_case(case, model, judge)
+        results.append(result)
+        if on_result is not None:
+            on_result(result)
     return RunResult(
         run_id=run_id or uuid.uuid4().hex[:12],
         suite_id=suite.suite_id,

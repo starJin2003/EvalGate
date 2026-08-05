@@ -1,0 +1,65 @@
+# Results volume: SEPARATE from the weights volume, on purpose.
+#
+# The weights PVC is mounted readOnly everywhere and gated on a sha256 that is
+# re-checked on every pod start. That is correct for weights and useless for
+# results, which have to be written. Sharing one mount forced a choice between
+# those two properties, and the first full-suite attempt lost its run to it: the
+# host directory is owned by the node's `ubuntu` (uid 1001) at mode 755, the Job
+# runs as uid 10001, and the single final write failed with EACCES after the
+# inference had already been done.
+#
+# So: two volumes, each with one job. Weights readOnly and hash-gated. Results
+# writable by uid 10001 and never in the same mount, so no future change to one
+# can alter the other's permissions.
+#
+# The directory is created and chowned by node-model-setup.sh. It must be owned
+# by 10001 because this is a `local` PV, not a CSI volume -- `fsGroup` only
+# relabels volumes whose plugin supports ownership management, and hostPath-style
+# local volumes do not, so the pod cannot fix the permissions for itself.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: evalgate-results-pv
+  labels:
+    app.kubernetes.io/name: evalgate-results
+    app.kubernetes.io/part-of: evalgate
+spec:
+  capacity:
+    # Advisory: local PVs enforce no quota. Run artifacts are ~140 KB each.
+    storage: 2Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  # Retain, so deleting the claim never deletes a completed run. The whole point
+  # of this volume is that a result outlives the pod that produced it.
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: models-local
+  local:
+    path: /var/lib/evalgate/results
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - evalgate-k3s
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: evalgate-results
+  namespace: evalgate
+  labels:
+    app.kubernetes.io/name: evalgate-results
+    app.kubernetes.io/part-of: evalgate
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: models-local
+  resources:
+    requests:
+      storage: 2Gi
+  # Explicit, because there are now two PVs in this class and binding by
+  # capacity alone would be a coin toss.
+  volumeName: evalgate-results-pv

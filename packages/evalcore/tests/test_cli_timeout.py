@@ -60,7 +60,10 @@ def test_default_timeout_is_unchanged_at_180s(monkeypatch, suite_path, tmp_path)
     """The default must not move. Changing it would silently alter every existing
     caller, including the CI gate workflow."""
     captured = _run_with(
-        monkeypatch, suite_path, tmp_path, ["--server-url", "http://127.0.0.1:8080"]
+        monkeypatch,
+        suite_path,
+        tmp_path,
+        ["--server-url", "http://127.0.0.1:8080", "--backend", "test"],
     )
     assert captured["timeout_s"] == 180.0
 
@@ -70,7 +73,7 @@ def test_timeout_flag_reaches_the_client(monkeypatch, suite_path, tmp_path) -> N
         monkeypatch,
         suite_path,
         tmp_path,
-        ["--server-url", "http://127.0.0.1:8080", "--timeout-s", "900"],
+        ["--server-url", "http://127.0.0.1:8080", "--backend", "test", "--timeout-s", "900"],
     )
     assert captured["timeout_s"] == 900.0
     assert captured["base_url"] == "http://127.0.0.1:8080"
@@ -84,7 +87,7 @@ def test_timeout_is_a_float_not_a_string(monkeypatch, suite_path, tmp_path) -> N
         monkeypatch,
         suite_path,
         tmp_path,
-        ["--server-url", "http://127.0.0.1:8080", "--timeout-s", "42.5"],
+        ["--server-url", "http://127.0.0.1:8080", "--backend", "test", "--timeout-s", "42.5"],
     )
     assert isinstance(captured["timeout_s"], float)
     assert captured["timeout_s"] == 42.5

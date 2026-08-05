@@ -22,10 +22,17 @@ spec:
   # No retries. A 2.5-hour job that silently re-runs on failure would burn five
   # hours and leave two partial artifacts; the failure should be inspected.
   backoffLimit: 0
-  # 4 h against a ~2.5 h expectation. Sized on the MEASURED 81-92 s/case from the
-  # shipped -t 3 config, not on the stale 40-60 min estimate that predates any
-  # measurement on this node.
-  activeDeadlineSeconds: 14400
+  # 6 h against a 3.80 h projection: +58% margin.
+  #
+  # Revised UP from 4 h after a 12-case soak measured the real sustained rates.
+  # A short smoke suggested 36.0 tok/s prefill and 7.85 tok/s generation; over
+  # 11 back-to-back long cases llama-server's own counters report **27.12 and
+  # 4.90** — roughly 25% and 38% slower. Short bursts flatter this node.
+  #
+  # At 4 h the margin would have been +5%, and a deadline that kills a run in its
+  # final minutes is not hypothetical: it is exactly how the soak that produced
+  # these numbers ended, at 11 of 12 cases.
+  activeDeadlineSeconds: 21600
   template:
     metadata:
       labels:
@@ -36,6 +43,35 @@ spec:
         runAsNonRoot: true
         runAsUser: 10001
         runAsGroup: 10001
+      initContainers:
+        # Fail in two seconds if the results mount is not writable, instead of in
+        # two and a half hours. The first attempt did all 96 cases' worth of work
+        # and then died on EACCES at the single final write; the CLI now probes
+        # too, but proving it here means the Job never even starts the model
+        # traffic when the mount is wrong.
+        - name: check-writable
+          image: evalgate-api:0.1.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              probe=/out/.writable-$$
+              touch "$probe" || { echo "FATAL: /out is not writable by uid $(id -u)" >&2; exit 1; }
+              rm -f "$probe"
+              echo "/out writable by uid $(id -u)"
+          volumeMounts:
+            - name: results
+              mountPath: /out
+          resources:
+            requests: {cpu: 50m, memory: 32Mi}
+            limits: {cpu: 200m, memory: 64Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
       containers:
         - name: eval
           image: evalgate-api:0.1.0
@@ -46,7 +82,12 @@ spec:
             - --suite
             - /eval/suite.json
             - --out
-            - /eval/run_v1_iter2000_oci.json
+            - /out/run_v1_iter2000_oci.json
+            # One line per case, flushed as it completes. This is what survives a
+            # killed pod: the first attempt lost every completed case because the
+            # run reached disk only in the final write.
+            - --progress-jsonl
+            - /out/run_v1_iter2000_oci.progress.jsonl
             - --server-url
             - http://evalgate-model.evalgate.svc.cluster.local:8080
             # Must match the local baseline exactly. `run_v1_iter2000.json` was
@@ -68,9 +109,15 @@ spec:
             - --timeout-s
             - "900"
           volumeMounts:
+            # Inputs: readOnly, and on the same volume as the hash-gated weights.
             - name: eval
               mountPath: /eval
               subPath: eval
+              readOnly: true
+            # Outputs: a different volume entirely, writable, Retain. Nothing
+            # about writing a result can touch the weights' mount.
+            - name: results
+              mountPath: /out
           resources:
             # This container waits on HTTP and scores JSON; the work is in the
             # model server's cgroup, not here. Kept small so it does not compete
@@ -87,9 +134,16 @@ spec:
             capabilities:
               drop: ["ALL"]
       volumes:
-        # Same PVC the model server uses, mounted read-WRITE here because the run
-        # artifact is written back to it. RWO permits this: it constrains a volume
-        # to one node, not one pod, and there is one node.
+        # Inputs. The same PVC the model server uses, and readOnly here too --
+        # this Job has no business writing anywhere near the weights. RWO is fine
+        # for two pods: it constrains a volume to one node, not one pod.
         - name: eval
           persistentVolumeClaim:
             claimName: evalgate-models
+            readOnly: true
+        # Outputs. Separate claim, separate host directory, owned by uid 10001,
+        # reclaimPolicy Retain -- so the artifact outlives both this pod and this
+        # Job object.
+        - name: results
+          persistentVolumeClaim:
+            claimName: evalgate-results

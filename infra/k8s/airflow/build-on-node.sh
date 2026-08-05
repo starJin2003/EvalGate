@@ -30,7 +30,15 @@ fi
 log "Streaming build context to the node."
 # shellcheck disable=SC2086
 $NODE_SSH "rm -rf ${REMOTE_DIR} && mkdir -p ${REMOTE_DIR}"
-tar --exclude='__pycache__' --exclude='*.pyc' -czf - -C "$HERE" Dockerfile dags \
+# COPYFILE_DISABLE=1 and the ._* exclusion are not tidiness. macOS bsdtar writes
+# any file carrying extended attributes as a second AppleDouble member named
+# `._<file>`, so `dags/evalgate_daily_eval.py` shipped an extra
+# `dags/._evalgate_daily_eval.py` into the image. It ends in `.py`, so Airflow's
+# dag-processor parses it, fails on the binary content, and reports a permanent
+# import error next to a DAG that is in fact fine — measured on the first build
+# of this image.
+COPYFILE_DISABLE=1 tar --exclude='__pycache__' --exclude='*.pyc' --exclude='._*' \
+  -czf - -C "$HERE" Dockerfile dags \
   | $NODE_SSH "tar -xzf - -C ${REMOTE_DIR}"
 
 log "Building ${TAG} on the node (foreground)."

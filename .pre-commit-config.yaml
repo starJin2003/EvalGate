@@ -7,6 +7,14 @@ repos:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
+        # Kubernetes manifests routinely put several objects in one file
+        # separated by `---`, and the default check-yaml calls that a parse
+        # error. Two committed manifests are legitimately multi-document:
+        # infra/k8s/airflow/20-evalgate-pod-rbac.yaml (Role + RoleBinding) and
+        # infra/k8s/model/25-results-pv.yaml (PersistentVolume + Claim).
+        # Splitting them to satisfy the hook would separate objects that are
+        # only correct together.
+        args: [--allow-multiple-documents]
       - id: check-toml
       - id: check-merge-conflict
       - id: check-added-large-files

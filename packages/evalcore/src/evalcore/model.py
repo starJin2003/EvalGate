@@ -73,6 +73,23 @@ class LlamaServerModel:
     def ref(self) -> str:
         return f"llama-server:{self.version}:{self.quantization}"
 
+    def build_info(self) -> str | None:
+        """llama.cpp's own build string, read from /props.
+
+        Recorded in the run artifact so a diff can refuse to compare runs served
+        by different llama.cpp builds. It is OBSERVED rather than declared, which
+        is the point: the backend label is supplied by the caller and could be
+        wrong, while this comes from the server. Returns None rather than raising
+        -- failing a whole run because a provenance field was unavailable would
+        be the wrong trade.
+        """
+        try:
+            request = urllib.request.Request(f"{self.base_url}/props", method="GET")
+            with urllib.request.urlopen(request, timeout=20) as response:
+                return json.loads(response.read()).get("build_info")
+        except Exception:
+            return None
+
     def _payload(self, case: Case) -> dict:
         return {
             "messages": build_messages(case.question, case.context),

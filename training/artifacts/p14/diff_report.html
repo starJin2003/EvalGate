@@ -1,0 +1,90 @@
+<!doctype html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>eval-gate grounded-docs-qa</title><style>
+:root { color-scheme: light dark; --bg:#fff; --fg:#111; --muted:#666; --line:#ddd;
+        --card:#fafafa; --bad:#b91c1c; --good:#15803d; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#0f1115; --fg:#e6e6e6; --muted:#9aa0a6; --line:#2a2f3a;
+          --card:#161a22; --bad:#f87171; --good:#4ade80; }
+}
+*{box-sizing:border-box}
+body{margin:0;padding:2rem 1rem;background:var(--bg);color:var(--fg);
+     font:15px/1.6 ui-sans-serif,system-ui,-apple-system,sans-serif}
+main{max-width:62rem;margin:0 auto}
+h1{font-size:1.4rem;margin:0 0 .5rem}
+.verdict{display:inline-block;padding:.15rem .6rem;border-radius:999px;
+         font-weight:700;font-size:.8rem;color:#fff}
+.pass{background:var(--good)} .fail{background:var(--bad)}
+table{border-collapse:collapse;width:100%;margin:1rem 0}
+th,td{border-bottom:1px solid var(--line);padding:.45rem .6rem;text-align:left}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+.bad{color:var(--bad)} .good{color:var(--good)}
+.case{border:1px solid var(--line);border-radius:8px;background:var(--card);
+      padding:.85rem 1rem;margin-bottom:.75rem}
+.meta{font-size:.75rem;color:var(--muted);margin-bottom:.4rem}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+@media (max-width:48rem){.cols{grid-template-columns:1fr}}
+pre{white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);
+    border-radius:6px;padding:.6rem;font-size:.8rem;overflow-x:auto;margin:.25rem 0}
+.scroll{overflow-x:auto}
+</style></head><body><main><h1>eval-gate <span class='verdict fail'>FAIL</span></h1><p class='meta'>grounded-docs-qa &middot; v1-golden96 &rarr; v2-golden96</p><p><strong>Overall 0.931 &rarr; 0.973 (+0.042)</strong></p><div class='scroll'><table><thead><tr><th>Category</th><th class='num'>Baseline</th><th class='num'>Candidate</th><th class='num'>Delta</th></tr></thead><tbody><tr><td>adversarial</td><td class='num'>1.000</td><td class='num'>0.969</td><td class='num bad'>-0.031</td></tr><tr><td>comparison</td><td class='num'>0.856</td><td class='num'>0.938</td><td class='num good'>+0.081</td></tr><tr><td>factual</td><td class='num'>0.969</td><td class='num'>1.000</td><td class='num good'>+0.031</td></tr><tr><td>howto</td><td class='num'>0.900</td><td class='num'>0.987</td><td class='num good'>+0.087</td></tr></tbody></table></div><h2>Threshold breaches</h2><ul><li class='bad'><strong>adversarial</strong> — dropped 0.031, limit 0.010</li></ul><h2>Regressed cases (3)</h2><div class='case'><div class='meta'>adversarial &middot; 674d2d5c2b6956a4 &middot; 1.00 &rarr; 0.25</div><div class='cols'><div><strong>Baseline</strong><pre>I refuse because the provided excerpts do not mention a PydanticORMMapper or how to use it for ORM integration [C5]. The excerpts instead document Pydantic&#x27;s ability to pair with SQLAlchemy and note that ORM integration is possible by defining models and using Pydantic&#x27;s aliases to avoid conflicts [C2][C5]. The excerpts also explain that Pydantic can validate arbitrary objects and that from_attributes enables validation of objects passed to the database [C5]. The excerpts further document that Pydantic can be used with SQLAlchemy and that ORM integration is shown by creating a CompanyOrm instance and validating it [C2][C5]. The excerpts also state that ORM integration is preferred when using Pydantic because it eliminates code duplication and that SQLAlchemy can be used with pure Pydantic models [C2]. The excerpts also document that Pydantic can validate ORM objects and that validation is done by getting attributes on the object [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts also state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code duplication [C5]. The excerpts state that validation is done by getting attributes on the object and that validation is preferred because it avoids code</pre></div><div><strong>Candidate</strong><pre>Pydantic can pair with SQLAlchemy to define the schema of database models and is used to create Pydantic models alongside SQLAlchemy models [C2].
+Pydantic models inherit from BaseModel and define fields as annotated attributes, and Pydantic can validate arbitrary objects by getting attributes on the object corresponding to field names [C5].
+Pydantic can also be used to define ORM models and can be paired with SQLAlchemy to create models that use Pydantic&#x27;s aliases to name reserved SQLAlchemy fields so conflicts are avoided [C2].
+Pydantic can be used to define database models and then validated from ORM objects using model_validate(), and the example shows using SQLAlchemy&#x27;s ORM to create a model and then validating it with CompanyModel.model_validate() [C5].
+Pydantic can also be used to define models that accept ORM objects and then validate them, and the example shows using SQLAlchemy&#x27;s ORM to create a model and then validating it with CompanyModel.model_validate() [C5].</pre></div></div><div class='meta'>refusal 0.00 — answered, refusal required; answered about absent symbol &#x27;PydanticORMMapper&#x27;<br>judge 1.00 — stub: 13 citation markers in prompt<br></div></div><div class='case'><div class='meta'>comparison &middot; 992f8ccdbb1e841f &middot; 1.00 &rarr; 0.75</div><div class='cols'><div><strong>Baseline</strong><pre>Using an alias makes the parameter name more readable and avoids the need to change the actual parameter name in the code, which can improve code clarity and API usability [C1][C5]._aliases make the parameter name more readable and avoid the need to change the actual parameter name in the code, which can improve code clarity and API usability [C1]._aliases make the parameter name more readable and avoid the need to change the actual parameter name in the code, which can improve code clarity and API usability [C1].</pre></div><div><strong>Candidate</strong><pre>Using an alias lets you give the parameter a name that is not a valid Python variable name (for example item-query instead of item_query) while still using the exact parameter name in the function call [C1]. This is useful when you need a parameter name that is not a valid Python variable name but must be used in the function call, such as item-query instead of item_query [C1]. FastAPI will still detect the parameter by name and will validate the value, so the alias is what is used to find the parameter value [C1]. FastAPI also supports aliases for query parameters and models, which can help re-use and declare validations for groups of related query parameters [C8]. The alias is an alternative name used when serializing and deserializing, and you can specify an alias on the Field with alias_generator, validation_alias, or serialization_alias [C6]. The alias is not a parameter name itself but an alternative name used in the function call [C1].</pre></div></div><div class='meta'>citation 1.00 — cited 6/6 factual sentences<br>refusal 0.00 — refused, answer required<br>judge 1.00 — stub: 14 citation markers in prompt<br></div></div><div class='case'><div class='meta'>howto &middot; d99b53caabf191d4 &middot; 1.00 &rarr; 0.97</div><div class='cols'><div><strong>Baseline</strong><pre>Import httpx and add it to your project with uv add httpx [C2]
+Create a TestClient by passing your FastAPI app to it [C2]
+Create functions that start with test_ and call the TestClient normally [C2]
+Use the TestClient object the same way as httpx [C2]
+Write assert statements with normal Python expressions [C2]
+Note that the TestClient receives data that can be converted to JSON [C4]
+If you need to send JSON bodies, use json, data, or data parameters [C4]
+For headers, use headers parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For form data, use data parameter [C4]
+For streaming, use streaming parameter [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies parameter with dict [C4]
+For cookies, use cookies</pre></div><div><strong>Candidate</strong><pre>Import TestClient from fastapi.testclient and create a TestClient by passing your FastAPI application to it [C2][C3].
+Create functions named test_ (the standard pytest convention) and call the client normally (for example: assert response.json() or assert response.jsonable_encoder() if you need to send a Pydantic model) [C2][C4].
+If you need to send Form Data instead of JSON, use the data parameter; if you need to send cookies, use the cookies parameter [C4].
+If you need to send a JSON body, pass a Python object (for example: {&quot;key&quot;: &quot;value&quot;}) to the json parameter [C4].
+If you need to send a JSON body and the backend expects a Pydantic model, use jsonable_encoder() [C4].
+If you need to send headers, pass a dict to the headers parameter [C4].
+If you need to send cookies, pass a dict to the cookies parameter [C4].
+If you need to send form data, use the data parameter [C4].
+If you need to send a JSON body and the backend expects a Pydantic model, use jsonable_encoder() [C4].
+If you need to send a JSON body and the backend expects a Pydantic model, use jsonable_encoder() [C4].
+If you need to send a JSON body and the backend expects a Pydantic model, use jsonable_encoder() [C4].
+If you need to send a JSON body and the backend expects a Pydantic model, use jsonable_encoder() [C4].
+If you need to send a JSON body and the backend expects a Pydantic model, use jsonable_encoder() [C4].
+If you need to send a JSON body and the backend expects a Pydantic model, use jsonable_encoder() [C4].
+If you need to send a JSON body and the backend expects a Pydantic model, use jsonable_encoder() [C4].
+If you need to send a JSON body and the backend expects a Pydantic model, use jsonable_encoder() [C4].
+If you need to send a JSON body and the backend expects a Pydantic model, use jsonable_encoder() [C4].
+If you need to send a JSON body and the backend expects a Pydantic model, use jsonable_encoder() [C4].
+If you need to send a JSON body and the backend expects a Pydantic model, use jsonable_encoder() [</pre></div></div><div class='meta'>citation 0.95 — cited 18/19 factual sentences<br>refusal 1.00 — answered, answer required<br>judge 1.00 — stub: 29 citation markers in prompt<br></div></div></main></body></html>

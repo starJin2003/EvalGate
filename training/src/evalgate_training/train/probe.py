@@ -115,6 +115,7 @@ def eval_adapters(
     checkpoints: list[str] | None = None,
     adapter_path: str | None = None,
     progress_log: str | None = None,
+    data: str | None = None,
 ) -> dict[str, Any]:
     """Loss for the untrained baseline and each saved checkpoint over the FULL
     valid split.
@@ -140,6 +141,12 @@ def eval_adapters(
     settings.pop("loss_log")
     if adapter_path:
         settings["adapter_path"] = adapter_path
+    # Which directory the valid split is read from. Immaterial to the number for
+    # v1 vs v2 -- their valid.jsonl files are byte-identical by construction and
+    # that is asserted at build time -- but recorded in the result so a reader
+    # can see which split was scored instead of inferring it from a default.
+    if data:
+        settings["data"] = data
     args = build_args(settings)
     adapter_dir = Path(args.adapter_path)
 
@@ -196,6 +203,10 @@ def eval_adapters(
     results: dict[str, Any] = {
         "rows": len(valid_set),
         "adapter_path": str(adapter_dir),
+        "data": str(args.data),
+        # The exact arms scored, in order, so the candidate set is part of the
+        # artifact rather than something to re-derive from a glob later.
+        "candidates": ["baseline", *names],
         "losses": {},
     }
 

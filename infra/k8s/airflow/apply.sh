@@ -45,6 +45,12 @@ kubectl apply -f "${HERE}/00-namespace.yaml" >/dev/null
 # first Airflow pod. Waiting here would block forever on the expected state.
 kubectl apply -f "${HERE}/10-logs-pvc.yaml" >/dev/null
 
+# Cross-namespace pod launching for the daily eval DAG. The chart binds its
+# pod-launcher Role in the `airflow` namespace only, and the DAG's pods run in
+# `evalgate`. Applied here rather than by hand because the failure it prevents is
+# a 403 at 03:00 on a night nobody is watching.
+kubectl apply -f "${HERE}/20-evalgate-pod-rbac.yaml" >/dev/null
+
 # --- secrets: checked, never generated ----------------------------------------
 #
 # Same rule as postgres-credentials. Three of these are not merely hygiene: the

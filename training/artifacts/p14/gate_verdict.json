@@ -1,0 +1,36 @@
+{
+  "verdict": "fail",
+  "delta": 0.042056258267195834,
+  "categories": {
+    "adversarial": {
+      "baseline": 1.0,
+      "candidate": 0.96875,
+      "delta": -0.03125
+    },
+    "comparison": {
+      "baseline": 0.8561083698830408,
+      "candidate": 0.9375,
+      "delta": 0.08139163011695916
+    },
+    "factual": {
+      "baseline": 0.96875,
+      "candidate": 1.0,
+      "delta": 0.03125
+    },
+    "howto": {
+      "baseline": 0.9004960317460317,
+      "candidate": 0.9873294346978557,
+      "delta": 0.08683340295182407
+    }
+  },
+  "breaches": [
+    {
+      "scope": "adversarial",
+      "baseline": 1.0,
+      "candidate": 0.96875,
+      "drop": 0.03125,
+      "limit": 0.01,
+      "reason": "dropped 0.031, limit 0.010"
+    }
+  ]
+}

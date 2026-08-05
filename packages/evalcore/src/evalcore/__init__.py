@@ -5,7 +5,7 @@ and reports. Built against a stubbed model so the whole gate is testable before
 any trained model exists; P1.3 swaps in a real endpoint and nothing else changes.
 """
 
-from .diff import Breach, CaseDelta, Diff, compare
+from .diff import BackendMismatch, Breach, CaseDelta, Diff, compare
 from .judge import JudgeCache, JudgeClient, JudgeProvider, RateLimited, StubJudge
 from .loader import from_golden_jsonl, load_suite, save_suite
 from .report import html_report, markdown_comment, terminal_report
@@ -21,6 +21,7 @@ from .schema import (
     ScorerSpec,
     Suite,
     Threshold,
+    ZeroTolerance,
 )
 
 __version__ = "0.1.0"
@@ -47,7 +48,9 @@ __all__ = [
     "StubModel",
     "Suite",
     "Threshold",
+    "ZeroTolerance",
     "__version__",
+    "BackendMismatch",
     "compare",
     "from_golden_jsonl",
     "html_report",

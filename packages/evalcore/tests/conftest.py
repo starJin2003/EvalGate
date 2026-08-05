@@ -13,6 +13,7 @@ from evalcore import (
     StubModel,
     Suite,
     Threshold,
+    ZeroTolerance,
 )
 
 
@@ -76,7 +77,11 @@ def suite(context) -> Suite:
         suite_id="fixture-suite",
         cases=cases,
         threshold=Threshold(max_drop=0.02),
-        category_thresholds={Category.adversarial: Threshold(max_drop=0.01, min_score=0.80)},
+        # Mirrors the real suite: adversarial is a case-count rule, not a score
+        # threshold. The fixture previously used Threshold(max_drop=0.01), which
+        # the Suite validator now rejects as sub-quantum -- correctly, since with
+        # one adversarial case the quantum is 1.0.
+        zero_tolerance={Category.adversarial: ZeroTolerance(max_regressed_cases=0)},
     )
 
 
