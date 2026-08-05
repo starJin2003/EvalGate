@@ -1,9 +1,32 @@
 name: eval-gate
 
-# The regression gate. Runs the suite on the PR head, compares against the
-# baseline promoted on main, comments the case-level diff, and fails the check
-# when a threshold is breached. Branch protection on `eval-gate` is what turns a
-# failure into a blocked merge; see BUILD_PLAN.md P3.
+# THE PR GATE. It runs NO model.
+#
+# A pull request cannot change model weights. It changes the prompt renderer, the
+# scorers, the suite builder and the harness -- all deterministic, all already
+# pinned by digests and unit tests. Re-running 96 cases per PR would spend 2.9 h
+# on the node measuring something the PR almost never affects, and a *subset*
+# does not trade accuracy for speed: at 12 cases one case is a third of a
+# category, so a gate anyone waits for cannot resolve the thresholds it is
+# checking. See packages/evalcore/src/evalcore/gate_config.py.
+#
+# So this workflow asks two questions instead:
+#
+#   1. IS THE INSTRUMENT INTACT?   lint, tests, and the suite still builds from
+#                                  the committed golden manifest.
+#   2. IS THE LAST MEASUREMENT GOOD AND RECENT?
+#                                  read the daily run's published latest.json,
+#                                  fail if the verdict is not `pass` or the
+#                                  result is older than the 36 h staleness bound.
+#
+# The scores come from the daily DAG at 08:00 UTC, not from here.
+#
+# EXIT CODES ARE LOAD-BEARING. `evalgate-eval gate` returns 1 for a merge-blocking
+# regression and 2 for a comparison that should never have been attempted (a
+# cross-backend or cross-build diff). Both block, but a CI log that conflates them
+# sends the reader to the wrong problem: 1 means "the model got worse", 2 means
+# "these two runs are not comparable, re-run one side". This workflow keeps them
+# distinct in its output.
 
 on:
   pull_request:
@@ -18,13 +41,20 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SUITE: artifacts/suite.json
-  BASELINE: artifacts/baseline_run.json
-  CANDIDATE: artifacts/candidate_run.json
+  # The three files that move every score. A PR touching any of them cannot be
+  # gated on a daily run that predates it. Kept in lockstep with
+  # SCORE_AFFECTING_PATHS in gate_config.py, which the escalate job asserts.
+  SCORE_AFFECTING: |
+    packages/evalcore/src/evalcore/prompt.py
+    packages/evalcore/src/evalcore/scorers.py
+    packages/evalcore/src/evalcore/loader.py
 
 jobs:
-  gate:
-    name: eval-gate
+  # ---------------------------------------------------------------------------
+  # 1. The instrument. Deterministic, no model, no network to the cluster.
+  # ---------------------------------------------------------------------------
+  instrument:
+    name: instrument intact
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
@@ -40,85 +70,180 @@ jobs:
       - name: Sync workspace
         run: uv sync --locked
 
-      # The judge cache is keyed on case + output + judge version, so an
-      # unchanged case costs no quota on reruns. Restoring it across PRs is
-      # what keeps the gate affordable on a zero-dollar budget.
-      - name: Restore judge cache
-        uses: actions/cache@v4
-        with:
-          path: .cache/judge.sqlite
-          key: judge-${{ runner.os }}-${{ hashFiles(env.SUITE) }}
-          restore-keys: judge-${{ runner.os }}-
-
-      - name: Build suite from the golden set
+      - name: Lint
         run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      # test_prompt.py pins the rendered prompt byte for byte, which is the check
+      # that would actually catch a silent score shift from a renderer edit.
+      - name: Tests
+        run: uv run pytest
+
+      # A binary invariant, not a score: the suite builder still produces a suite
+      # that loads under the current validator. This is what a fast check CAN
+      # detect -- an empty suite, a dropped category, a threshold below the
+      # measurement quantum -- without any inference.
+      - name: Suite still builds and validates
+        run: |
+          mkdir -p artifacts
           uv run evalgate-eval build-suite \
             --golden training/artifacts/golden_set.jsonl \
-            --out "$SUITE"
+            --out artifacts/suite.json
+          uv run python - <<'PY'
+          from pathlib import Path
+          from evalcore.loader import load_suite
+          s = load_suite(Path("artifacts/suite.json"))
+          assert len(s.cases) == 96, f"expected 96 cases, got {len(s.cases)}"
+          cats = {str(c.category) for c in s.cases}
+          assert cats == {"adversarial", "comparison", "factual", "howto"}, cats
+          assert s.zero_tolerance, "adversarial ZeroTolerance rule is missing"
+          print(f"suite ok: {len(s.cases)} cases, categories {sorted(cats)}")
+          PY
 
-      # P1.3 replaces this with a real llama-server endpoint. Until then the
-      # echo model exercises the whole path so the gate itself is proven.
-      - name: Run the candidate
-        run: |
-          uv run evalgate-eval run \
-            --suite "$SUITE" \
-            --out "$CANDIDATE" \
-            --run-id "pr-${{ github.event.pull_request.number || github.run_id }}" \
-            --model-ref "${{ github.event.pull_request.head.sha || github.sha }}" \
-            --judge --judge-cache .cache/judge.sqlite
+  # ---------------------------------------------------------------------------
+  # 2. Freshness. Reads the verdict the daily DAG published; runs no model.
+  # ---------------------------------------------------------------------------
+  freshness:
+    name: daily verdict fresh and passing
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Fetch the baseline promoted on main
-        continue-on-error: true
-        uses: actions/download-artifact@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
-          name: eval-baseline
-          path: artifacts
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ vars.EVAL_BASELINE_RUN_ID }}
+          enable-cache: true
 
-      - name: Gate
-        id: gate
+      - name: Install Python 3.12
+        run: uv python install
+
+      - name: Sync workspace
+        run: uv sync --locked
+
+      # WHERE latest.json COMES FROM.
+      #
+      # The daily DAG's publish_latest task writes it to the results volume on
+      # the node at /out/daily/latest.json. This job needs it over HTTP.
+      #
+      # EVALGATE_DAILY_URL is a repository *variable*, not a secret: it is a URL,
+      # and putting it in secrets would only make it harder to debug a 404. It is
+      # allowed to be unset, and then this job fails with a named cause rather
+      # than silently passing -- see the next step for why that is the correct
+      # direction to fail.
+      - name: Fetch the published daily verdict
+        id: fetch
+        env:
+          DAILY_URL: ${{ vars.EVALGATE_DAILY_URL }}
         run: |
-          set +e
-          uv run evalgate-eval gate \
-            --suite "$SUITE" \
-            --baseline "$BASELINE" \
-            --candidate "$CANDIDATE" \
-            --comment artifacts/comment.md \
-            --html artifacts/report.html \
-            --json artifacts/verdict.json
-          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
+          mkdir -p artifacts
+          if [ -z "${DAILY_URL}" ]; then
+            echo "::error::EVALGATE_DAILY_URL is not set, so the last daily verdict cannot be read."
+            echo "::error::Set it to a URL serving the DAG's /out/daily/latest.json."
+            exit 1
+          fi
+          # -f so a 404 is a failure rather than an HTML body parsed as JSON.
+          if ! curl -fsS --max-time 30 "${DAILY_URL}" -o artifacts/latest.json; then
+            echo "::error::could not fetch ${DAILY_URL}."
+            echo "::error::An unreachable verdict and a dead DAG are the same thing to a merge decision."
+            exit 1
+          fi
+          echo "fetched $(wc -c < artifacts/latest.json) bytes"
 
-      - name: Upload report
-        if: always()
-        uses: actions/upload-artifact@v4
+      # check-daily asserts BOTH: verdict == pass, and age <= MAX_DAILY_AGE_H.
+      #
+      # 36 h is not arbitrary and is not recomputed here. floor = interval (24 h)
+      # + worst-case duration (3.8 h) = 27.8 h; 36 h leaves 8.2 h over that floor,
+      # which buys exactly one property: ONE missed night does not block merges,
+      # TWO consecutive missed nights do.
+      #
+      # FAILING CLOSED IS THE DESIGN. A regression must block merges, and so must
+      # a silently dead DAG -- the whole point of stamping completed_at at finish
+      # rather than at the logical date is to tell those two apart in the log
+      # while both still block.
+      - name: Check the daily verdict is passing and recent
+        run: uv run evalgate-eval check-daily --latest artifacts/latest.json
+
+  # ---------------------------------------------------------------------------
+  # 3. Escalation. The narrow exception, and it is a REQUIRED check, not a run.
+  # ---------------------------------------------------------------------------
+  escalate:
+    name: score-affecting paths
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
         with:
-          name: eval-report
-          path: artifacts/
+          # Need the base commit to diff against; a shallow clone has neither.
+          fetch-depth: 0
 
-      - name: Comment on the PR
-        if: always() && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
         with:
-          script: |
-            const fs = require('fs');
-            const path = 'artifacts/comment.md';
-            if (!fs.existsSync(path)) return;
-            const body = fs.readFileSync(path, 'utf8');
-            const marker = '<!-- eval-gate -->';
-            const { owner, repo } = context.repo;
-            const issue_number = context.issue.number;
-            const existing = await github.rest.issues.listComments({ owner, repo, issue_number });
-            const mine = existing.data.find(c => c.body.includes(marker));
-            const payload = `${marker}\n${body}`;
-            if (mine) {
-              await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body: payload });
-            } else {
-              await github.rest.issues.createComment({ owner, repo, issue_number, body: payload });
-            }
+          enable-cache: true
 
-      - name: Fail the check on a breach
-        if: steps.gate.outputs.exit_code != '0'
+      - name: Install Python 3.12
+        run: uv python install
+
+      - name: Sync workspace
+        run: uv sync --locked
+
+      # The filter list lives in gate_config.py and is duplicated in this file's
+      # env block for the shell to read. Asserting they agree means the two cannot
+      # drift into a state where the gate escalates on a different set of files
+      # than the config documents.
+      - name: The filter matches gate_config.SCORE_AFFECTING_PATHS
         run: |
-          echo "::error::eval-gate blocked this merge; see the PR comment and the eval-report artifact"
+          uv run python - <<'PY'
+          import os
+          from evalcore.gate_config import SCORE_AFFECTING_PATHS
+          declared = {p.strip() for p in os.environ["SCORE_AFFECTING"].split() if p.strip()}
+          coded = set(SCORE_AFFECTING_PATHS)
+          assert declared == coded, f"workflow {declared} != gate_config {coded}"
+          print("filter agrees with gate_config:")
+          for p in sorted(coded):
+              print(f"  {p}")
+          PY
+
+      - name: Which score-affecting files does this PR touch
+        id: filter
+        if: github.event_name == 'pull_request'
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.event.pull_request.head.sha }}"
+          CHANGED=$(git diff --name-only "${BASE}" "${HEAD}")
+          HITS=""
+          for p in ${SCORE_AFFECTING}; do
+            if printf '%s\n' "${CHANGED}" | grep -qxF "${p}"; then
+              HITS="${HITS}${p}"$'\n'
+            fi
+          done
+          {
+            echo "hits<<EOF"
+            printf '%s' "${HITS}"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          if [ -n "${HITS}" ]; then
+            printf 'score-affecting files changed:\n%s' "${HITS}"
+          else
+            echo "no score-affecting files changed; the daily verdict covers this PR"
+          fi
+
+      # WHAT HAPPENS WHEN A PR TOUCHES ONE OF THE THREE AND NO FULL RUN EXISTS:
+      # this check fails, and the PR is blocked until a full 96-case run against
+      # THIS PR's code has been run on the node and published.
+      #
+      # It deliberately does not try to run the suite here. The model server is
+      # ClusterIP with no Ingress -- a GitHub runner cannot reach it, by design --
+      # and the run takes 2.9 h, which is not a check anyone waits on. So this is
+      # an async required check: a human runs the suite against the PR head, the
+      # verdict is published, and the re-run of this workflow goes green.
+      - name: Block until a full run covers this change
+        if: steps.filter.outputs.hits != ''
+        run: |
+          echo "::error::This PR changes files that move every score:"
+          printf '%s\n' "${{ steps.filter.outputs.hits }}" | sed '/^$/d' | while read -r p; do
+            echo "::error::  ${p}"
+          done
+          echo "::error::No digest can say by how much, so the last daily run does not cover this PR."
+          echo "::error::Run the 96-case suite against this PR's code on the node, publish the verdict, then re-run this check."
           exit 1

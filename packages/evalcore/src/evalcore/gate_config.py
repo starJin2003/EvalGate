@@ -48,8 +48,13 @@ from dataclasses import dataclass
 # just before tonight's run must not be blocked for a result that is merely old
 # rather than missing.
 #
-#     DAILY_SCHEDULE_UTC   03:00, a quiet hour on a node whose binding
+#     DAILY_SCHEDULE_UTC   08:00, a quiet hour on a node whose binding
 #                          constraint is CPU and which also serves a public API.
+#                          Moved from 03:00 UTC on 2026-08-05: that was 22:00 in
+#                          the operator's America/Chicago, so a "nightly" batch
+#                          ran every evening. 08:00 UTC is 03:00 Chicago. ONLY
+#                          the instant moved -- the interval is still 24 h, so
+#                          the two numbers below keep their derivations.
 #     DAILY_DEADLINE_H     6 h. Measured full run is 2.90 h; the soak-derived
 #                          projection under sustained load was 3.80 h. Sized on
 #                          3.80, NOT on the 2.75 h a short burst suggested --
@@ -70,7 +75,7 @@ from dataclasses import dataclass
 #
 # That is the intended trade. A single flaky night should not stop the team; a
 # silently dead DAG should.
-DAILY_SCHEDULE_UTC = "0 3 * * *"
+DAILY_SCHEDULE_UTC = "0 8 * * *"
 DAILY_DEADLINE_H = 6
 MAX_DAILY_AGE_H = 36
 

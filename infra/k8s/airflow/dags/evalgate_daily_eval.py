@@ -120,11 +120,22 @@ def _pod(task_id: str, arguments: list[str], timeout_h: int) -> KubernetesPodOpe
 @dag(
     dag_id="evalgate_daily_eval",
     description="Full 96-case golden suite against the deployed model server, then gate.",
-    # 03:00 UTC. Quiet hour on a node whose binding constraint is CPU and which
-    # also serves a public API; inference at 2500m would otherwise contend with
-    # daytime traffic. This schedule and MAX_DAILY_AGE_H are one decision -- see
-    # gate_config.py.
-    schedule="0 3 * * *",
+    # 08:00 UTC = 03:00 America/Chicago. Quiet hour on a node whose binding
+    # constraint is CPU and which also serves a public API; inference at 2500m
+    # would otherwise contend with daytime traffic.
+    #
+    # WAS 03:00 UTC until 2026-08-05, taken from the "nightly batch" habit and
+    # never checked against the operator's clock: 03:00 UTC is 22:00 Chicago, so
+    # the 2.9 h run occupied the node every *evening*. Only the cron instant
+    # moves. The interval is still 24 h, so the 6 h deadline and the 36 h
+    # staleness bound keep their derivations untouched -- see gate_config.py.
+    #
+    # The timezone stays UTC and is NOT America/Chicago. A local-timezone cron
+    # skips a run at the spring-forward transition and runs twice at the autumn
+    # one, which on a 2.9 h job means either a missing day the staleness bound
+    # will flag or two runs contending for the same 2500m. Accepted cost: when
+    # Chicago returns to CST this fires at 02:00 local rather than 03:00.
+    schedule="0 8 * * *",
     # MUST BE IN THE PAST, and this is not a formality. `DagRun` builds task
     # instances only for tasks whose start_date is at or before the run's logical
     # date, and a DAG-level start_date propagates to every task. This was written
